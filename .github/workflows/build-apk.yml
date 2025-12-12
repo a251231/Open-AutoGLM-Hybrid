@@ -58,7 +58,8 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/}
           RELEASE_DIR=android-app/app/build/outputs/apk/release
           ls -al "${RELEASE_DIR}"
-          mv "${RELEASE_DIR}/app-release.apk" "${RELEASE_DIR}/AutoGLM-Helper-${VERSION}.apk"
+          APK_PATH=$(ls "${RELEASE_DIR}"/app-release*.apk | head -n 1)
+          mv "${APK_PATH}" "${RELEASE_DIR}/AutoGLM-Helper-${VERSION}.apk"
 
       - name: Upload Release APK (on tag)
         if: startsWith(github.ref, 'refs/tags/')
