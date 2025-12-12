@@ -25,11 +25,7 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           accept-android-sdk-licenses: true
-          packages: |
-            cmdline-tools;latest
-            platforms;android-34
-            build-tools;34.0.0
-            platform-tools
+          packages: "cmdline-tools;latest platforms;android-34 build-tools;34.0.0 platform-tools"
 
       - name: Prepare Gradle
         uses: gradle/actions/setup-gradle@v3
