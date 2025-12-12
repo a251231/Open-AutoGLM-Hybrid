@@ -38,10 +38,12 @@ android {
 dependencies {
     // Kotlin
     implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.0")
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
     
-    // NanoHTTPD - è½»é‡çº§ HTTP æœåŠ¡å™¨
+    // NanoHTTPD - ÇáÁ¿¼¶HTTP ·şÎñÆ÷
     implementation("org.nanohttpd:nanohttpd:2.3.1")
     
-    // JSON å¤„ç† (Android è‡ªå¸¦ï¼Œä½†æ˜¾å¼å£°æ˜)
+    // JSON ´¦Àí (Android ×Ô´ø£¬µ«ÏÔÊ½ÉùÃ÷)
     // implementation("org.json:json:20230227")
 }

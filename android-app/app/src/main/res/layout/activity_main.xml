@@ -44,12 +44,56 @@
         android:layout_height="wrap_content"
         android:text="@string/test_connection" />
 
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="8dp"
+        android:background="#DDDDDD" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/command_center"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/addCommandButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/add_command" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/emptyCommandText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/empty_command_hint"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/commandList"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="1" />
+
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="ä½¿ç”¨è¯´æ˜Ž:\n\n1. ç‚¹å‡»ä¸Šæ–¹æŒ‰é’®å¼€å¯æ— éšœç¢æœåŠ¡\n2. åœ¨ Termux ä¸­è¿è¡Œ autoglm\n3. è¾“å…¥ä»»åŠ¡ï¼Œæ‰‹æœºå°†è‡ªåŠ¨æ‰§è¡Œ\n\næœåŠ¡å™¨åœ°å€: http://localhost:8080"
+        android:text="????¡±¡§¨¨¡¥¡ä???:\n\n1. ??1???????¨C1??¡ë¨¦¡¯???€??¡¥?¡ª?¨¦???¡é???????\n2. ???Termux ??-¨¨??¨¨??autoglm\n3. ¨¨?¡°?¡­£¤??????????¡ë???o?¡ã?¨¨?a??¡§?¡ë¡ì¨¨??\n\n????????¡§??¡ã??€: http://localhost:8080"
         android:textSize="12sp"
-        android:layout_marginTop="32dp"
+        android:layout_marginTop="16dp"
         android:padding="16dp"
         android:background="#F0F0F0" />
 
