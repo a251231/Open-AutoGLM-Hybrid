@@ -28,6 +28,14 @@
             android:layout_marginTop="4dp"
             android:textColor="#444444"
             android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/commandStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="#777777"
+            android:textSize="12sp" />
     </LinearLayout>
 
     <LinearLayout

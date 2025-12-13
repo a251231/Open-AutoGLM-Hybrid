@@ -42,14 +42,20 @@ class CommandRepository(context: Context) {
 
     fun upsertCommand(command: Command) {
         val existing = commandDao.getById(command.id)
+        // 如果不存在旧记录且标题/内容均为空，跳过
+        if (existing == null && command.title.isBlank() && command.content.isBlank()) {
+            return
+        }
         val merged = Command(
             id = command.id,
-            title = if (command.title.isNotBlank()) command.title else existing?.title ?: command.title,
-            content = if (command.content.isNotBlank()) command.content else existing?.content ?: command.content,
-            updatedAt = command.updatedAt,
+            title = if (command.title.isNotBlank()) command.title else existing?.title ?: "",
+            content = if (command.content.isNotBlank()) command.content else existing?.content ?: "",
+            updatedAt = maxOf(command.updatedAt, existing?.updatedAt ?: 0),
             lastResult = command.lastResult ?: existing?.lastResult,
             lastRunAt = command.lastRunAt ?: existing?.lastRunAt
         )
+        // 如果合并后依然缺少标题或内容，跳过
+        if (merged.title.isBlank() || merged.content.isBlank()) return
         commandDao.insert(CommandEntity.fromDomain(merged))
     }
 

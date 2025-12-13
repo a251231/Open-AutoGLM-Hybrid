@@ -45,6 +45,7 @@ class MainActivity : Activity() {
     private lateinit var saveConfigButton: Button
     private lateinit var resetConfigButton: Button
     private lateinit var testConfigButton: Button
+    private lateinit var refreshCommandButton: Button
     private lateinit var authTokenText: TextView
     private lateinit var regenerateTokenButton: Button
     private lateinit var presetNameInput: EditText
@@ -102,6 +103,7 @@ class MainActivity : Activity() {
         presetSpinner = findViewById(R.id.presetSpinner)
         savePresetButton = findViewById(R.id.savePresetButton)
         activatePresetButton = findViewById(R.id.activatePresetButton)
+        refreshCommandButton = findViewById(R.id.refreshCommandButton)
         commandRepository = CommandRepository(this)
         commandAdapter = CommandAdapter(
             onPublish = { publishCommand(it) },
@@ -132,6 +134,9 @@ class MainActivity : Activity() {
         regenerateTokenButton.setOnClickListener { regenerateToken() }
         savePresetButton.setOnClickListener { saveCurrentToPreset() }
         activatePresetButton.setOnClickListener { activateSelectedPreset() }
+        refreshCommandButton.setOnClickListener {
+            syncCommandsFromServer(showToast = true)
+        }
 
         commandListView.layoutManager = LinearLayoutManager(this)
         commandListView.adapter = commandAdapter
@@ -333,7 +338,7 @@ class MainActivity : Activity() {
         emptyCommandText.isVisible = latest.isEmpty()
     }
 
-    private fun syncCommandsFromServer() {
+    private fun syncCommandsFromServer(showToast: Boolean = false) {
         Thread {
             try {
                 val url = URL("http://localhost:${AutoGLMAccessibilityService.PORT}/commands")
@@ -360,10 +365,18 @@ class MainActivity : Activity() {
                             )
                         )
                     }
-                    runOnUiThread { refreshCommands() }
+                    runOnUiThread {
+                        refreshCommands()
+                        if (showToast) Toast.makeText(this, getString(R.string.sync_success), Toast.LENGTH_SHORT).show()
+                    }
                 }
                 connection.disconnect()
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (showToast) {
+                    runOnUiThread {
+                        Toast.makeText(this, getString(R.string.sync_failed, e.message ?: ""), Toast.LENGTH_LONG).show()
+                    }
+                }
             }
         }.start()
     }
