@@ -5,6 +5,7 @@ import android.util.Log
 import fi.iki.elonen.NanoHTTPD
 import org.json.JSONObject
 import java.util.UUID
+import kotlin.jvm.Volatile
 
 class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8080) : NanoHTTPD(port) {
     
