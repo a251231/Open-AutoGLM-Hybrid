@@ -29,4 +29,20 @@
     <string name="edit">编辑</string>
     <string name="delete">删除</string>
     <string name="usage_text">使用说明:\n\n1. 点击上方按钮开启无障碍服务\n2. 在 Termux 中运行 autoglm\n3. 输入任务，手机将自动执行\n\n服务器地址: http://localhost:8080</string>
+    <string name="config_title">LLM 配置</string>
+    <string name="config_api_key_hint">API Key</string>
+    <string name="config_base_url_hint">Base URL</string>
+    <string name="config_model_hint">模型</string>
+    <string name="config_save">保存</string>
+    <string name="config_reset">重置</string>
+    <string name="config_test">测试接口</string>
+    <string name="config_save_success">配置已保存</string>
+    <string name="config_reset_success">已恢复默认配置</string>
+    <string name="config_base_url_invalid">请输入有效的 Base URL</string>
+    <string name="config_test_success">接口可达 (HTTP %1$d)</string>
+    <string name="config_test_failed">接口不可达: %1$s</string>
+    <string-array name="provider_options">
+        <item>grs</item>
+        <item>siliconflow</item>
+    </string-array>
 </resources>

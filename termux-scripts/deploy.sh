@@ -71,11 +71,12 @@ update_packages() {
 install_dependencies() {
     print_info "安装必需软件..."
 
-    if ! command -v python >/dev/null 2>&1; then
+    if ! command -v python >/dev/null 2>&1 && ! command -v python3 >/dev/null 2>&1; then
         print_info "安装 Python..."
         eval "$PKG_INSTALL python"
     else
-        print_success "已检测到 Python: $(python --version)"
+        PY_VER="$( (command -v python3 && python3 --version) || (command -v python && python --version) )"
+        print_success "已检测到 Python: ${PY_VER}"
     fi
 
     if ! command -v git >/dev/null 2>&1; then
@@ -91,8 +92,15 @@ install_dependencies() {
 
 install_python_packages() {
     print_info "安装 Python 依赖..."
-    pip install --upgrade pip
-    pip install pillow openai requests
+    PYTHON_BIN="$(command -v python3 || command -v python || true)"
+    if [ -z "$PYTHON_BIN" ]; then
+        print_error "未找到可用的 python 解释器"
+        exit 1
+    fi
+
+    "$PYTHON_BIN" -m ensurepip --upgrade >/dev/null 2>&1 || true
+    "$PYTHON_BIN" -m pip install --upgrade pip
+    "$PYTHON_BIN" -m pip install pillow openai requests
     print_success "Python 依赖安装完成"
 }
 

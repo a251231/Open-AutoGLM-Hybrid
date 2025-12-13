@@ -3,13 +3,18 @@ package com.autoglm.helper
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.SharedPreferences
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.text.TextUtils
 import android.view.LayoutInflater
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.isVisible
@@ -27,8 +32,16 @@ class MainActivity : Activity() {
     private lateinit var addCommandButton: Button
     private lateinit var commandListView: RecyclerView
     private lateinit var emptyCommandText: TextView
+    private lateinit var apiKeyInput: EditText
+    private lateinit var baseUrlInput: EditText
+    private lateinit var modelInput: EditText
+    private lateinit var providerSpinner: Spinner
+    private lateinit var saveConfigButton: Button
+    private lateinit var resetConfigButton: Button
+    private lateinit var testConfigButton: Button
     private lateinit var commandRepository: CommandRepository
     private lateinit var commandAdapter: CommandAdapter
+    private val prefs: SharedPreferences by lazy { getSharedPreferences(PREF_NAME, MODE_PRIVATE) }
     
     private val handler = Handler(Looper.getMainLooper())
     private val updateRunnable = object : Runnable {
@@ -36,6 +49,18 @@ class MainActivity : Activity() {
             updateStatus()
             handler.postDelayed(this, 1000)
         }
+    }
+
+    companion object {
+        private const val PREF_NAME = "app_config"
+        private const val KEY_API_KEY = "api_key"
+        private const val KEY_BASE_URL = "base_url"
+        private const val KEY_MODEL = "model"
+        private const val KEY_PROVIDER = "provider"
+
+        private const val DEFAULT_BASE_URL = "https://api.grsai.com/v1"
+        private const val DEFAULT_MODEL = "gpt-4-vision-preview"
+        private const val DEFAULT_PROVIDER = "grs"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,12 +74,22 @@ class MainActivity : Activity() {
         addCommandButton = findViewById(R.id.addCommandButton)
         commandListView = findViewById(R.id.commandList)
         emptyCommandText = findViewById(R.id.emptyCommandText)
+        apiKeyInput = findViewById(R.id.apiKeyInput)
+        baseUrlInput = findViewById(R.id.baseUrlInput)
+        modelInput = findViewById(R.id.modelInput)
+        providerSpinner = findViewById(R.id.providerSpinner)
+        saveConfigButton = findViewById(R.id.saveConfigButton)
+        resetConfigButton = findViewById(R.id.resetConfigButton)
+        testConfigButton = findViewById(R.id.testConfigButton)
         commandRepository = CommandRepository(this)
         commandAdapter = CommandAdapter(
             onPublish = { publishCommand(it) },
             onEdit = { showCommandDialog(it) },
             onDelete = { confirmDelete(it) }
         )
+
+        setupProviderSpinner()
+        loadConfigToUi()
         
         openSettingsButton.setOnClickListener {
             openAccessibilitySettings()
@@ -67,6 +102,10 @@ class MainActivity : Activity() {
         addCommandButton.setOnClickListener {
             showCommandDialog()
         }
+
+        saveConfigButton.setOnClickListener { saveConfig() }
+        resetConfigButton.setOnClickListener { resetConfig() }
+        testConfigButton.setOnClickListener { testConfigEndpoint() }
 
         commandListView.layoutManager = LinearLayoutManager(this)
         commandListView.adapter = commandAdapter
@@ -149,6 +188,110 @@ class MainActivity : Activity() {
                 }
             }
         }.start()
+    }
+
+    private fun setupProviderSpinner() {
+        val providers = resources.getStringArray(R.array.provider_options)
+        val adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_item,
+            providers
+        )
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        providerSpinner.adapter = adapter
+    }
+
+    private fun loadConfigToUi() {
+        val apiKey = prefs.getString(KEY_API_KEY, "") ?: ""
+        val baseUrl = prefs.getString(KEY_BASE_URL, DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL
+        val model = prefs.getString(KEY_MODEL, DEFAULT_MODEL) ?: DEFAULT_MODEL
+        val provider = prefs.getString(KEY_PROVIDER, DEFAULT_PROVIDER) ?: DEFAULT_PROVIDER
+        val providers = resources.getStringArray(R.array.provider_options)
+        val index = providers.indexOf(provider).takeIf { it >= 0 } ?: 0
+
+        apiKeyInput.setText(apiKey)
+        baseUrlInput.setText(baseUrl)
+        modelInput.setText(model)
+        providerSpinner.setSelection(index)
+    }
+
+    private fun saveConfig() {
+        val apiKey = apiKeyInput.text.toString().trim()
+        val baseUrl = baseUrlInput.text.toString().trim()
+        val model = modelInput.text.toString().trim()
+        val provider = providerSpinner.selectedItem?.toString()?.trim() ?: DEFAULT_PROVIDER
+
+        if (baseUrl.isBlank() || !isValidUrl(baseUrl)) {
+            Toast.makeText(this, getString(R.string.config_base_url_invalid), Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        prefs.edit()
+            .putString(KEY_API_KEY, apiKey)
+            .putString(KEY_BASE_URL, baseUrl)
+            .putString(KEY_MODEL, if (model.isBlank()) DEFAULT_MODEL else model)
+            .putString(KEY_PROVIDER, provider)
+            .apply()
+
+        Toast.makeText(this, getString(R.string.config_save_success), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun resetConfig() {
+        apiKeyInput.setText("")
+        baseUrlInput.setText(DEFAULT_BASE_URL)
+        modelInput.setText(DEFAULT_MODEL)
+        val providers = resources.getStringArray(R.array.provider_options)
+        val index = providers.indexOf(DEFAULT_PROVIDER).takeIf { it >= 0 } ?: 0
+        providerSpinner.setSelection(index)
+
+        prefs.edit()
+            .putString(KEY_API_KEY, "")
+            .putString(KEY_BASE_URL, DEFAULT_BASE_URL)
+            .putString(KEY_MODEL, DEFAULT_MODEL)
+            .putString(KEY_PROVIDER, DEFAULT_PROVIDER)
+            .apply()
+
+        Toast.makeText(this, getString(R.string.config_reset_success), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun testConfigEndpoint() {
+        val baseUrl = baseUrlInput.text.toString().trim().ifBlank { DEFAULT_BASE_URL }
+        Thread {
+            try {
+                val url = URL(baseUrl)
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 3000
+                connection.readTimeout = 3000
+                val code = connection.responseCode
+                connection.inputStream?.close()
+                connection.disconnect()
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.config_test_success, code),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.config_test_failed, e.message ?: "未知错误"),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun isValidUrl(url: String): Boolean {
+        return try {
+            val parsed = Uri.parse(url)
+            !TextUtils.isEmpty(parsed.scheme) && !TextUtils.isEmpty(parsed.host)
+        } catch (e: Exception) {
+            false
+        }
     }
 
     private fun refreshCommands(commands: List<Command>? = null) {

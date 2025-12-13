@@ -27,6 +27,39 @@ logging.basicConfig(
 logger = logging.getLogger('PhoneController')
 
 
+def load_config_from_app(helper_url: str = "http://localhost:8080") -> bool:
+    """从 App 拉取配置并注入环境变量"""
+    try:
+        resp = requests.get(f"{helper_url}/config", timeout=2)
+        if resp.status_code == 200:
+            data = resp.json()
+            api_key = data.get("api_key")
+            base_url = data.get("base_url")
+            model = data.get("model")
+            provider = data.get("provider")
+
+            if api_key:
+                os.environ["PHONE_AGENT_API_KEY"] = api_key
+            if base_url:
+                os.environ["PHONE_AGENT_BASE_URL"] = base_url
+            if model:
+                os.environ["PHONE_AGENT_MODEL"] = model
+            if provider:
+                os.environ["PHONE_AGENT_PROVIDER"] = provider
+
+            logger.info("已从 App 配置加载 LLM 参数")
+            return True
+        logger.warning(f"获取 App 配置失败，HTTP {resp.status_code}")
+        return False
+    except Exception as exc:
+        logger.debug(f"从 App 读取配置失败: {exc}")
+        return False
+
+
+# 启动时优先尝试加载 App 配置
+load_config_from_app()
+
+
 class PhoneController:
     """手机控制器 - 支持自动降级"""
     
