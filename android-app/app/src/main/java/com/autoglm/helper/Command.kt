@@ -6,5 +6,7 @@ data class Command(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
     val content: String,
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    val lastResult: String? = null,
+    val lastRunAt: Long? = null
 )

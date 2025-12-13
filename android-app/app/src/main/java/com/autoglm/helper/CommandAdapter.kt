@@ -10,7 +10,8 @@ import androidx.recyclerview.widget.RecyclerView
 class CommandAdapter(
     private val onPublish: (Command) -> Unit,
     private val onEdit: (Command) -> Unit,
-    private val onDelete: (Command) -> Unit
+    private val onDelete: (Command) -> Unit,
+    private val onDetail: (Command) -> Unit
 ) : RecyclerView.Adapter<CommandAdapter.CommandViewHolder>() {
 
     private val items = mutableListOf<Command>()
@@ -44,6 +45,7 @@ class CommandAdapter(
             titleView.text = command.title
             contentView.text = command.content
 
+            itemView.setOnClickListener { onDetail(command) }
             publishButton.setOnClickListener { onPublish(command) }
             editButton.setOnClickListener { onEdit(command) }
             deleteButton.setOnClickListener { onDelete(command) }

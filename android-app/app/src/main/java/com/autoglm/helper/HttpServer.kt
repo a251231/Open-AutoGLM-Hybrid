@@ -41,6 +41,10 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
                 uri == "/input" && method == Method.POST -> handleInput(session)
                 uri == "/config" && method == Method.GET -> handleConfigGet(session)
                 uri == "/config" && method == Method.POST -> handleConfigUpdate(session)
+                uri == "/commands" && method == Method.GET -> handleCommandsGet(session)
+                uri == "/commands" && method == Method.POST -> handleCommandsPost(session)
+                uri == "/command_history" && method == Method.GET -> handleCommandHistoryGet(session)
+                uri == "/command_history" && method == Method.POST -> handleCommandHistoryPost(session)
                 uri == "/command" && method == Method.POST -> handleCommandPost(session)
                 uri == "/command" && method == Method.GET -> handleCommandGet(session)
                 // 兼容旧接口
@@ -224,6 +228,18 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
         commandJson.put("content", content)
         commandJson.put("updatedAt", json.optLong("updatedAt", System.currentTimeMillis()))
         inMemoryCommand = commandJson
+        // 同步存储
+        val repository = CommandRepository(service)
+        repository.upsertCommand(
+            Command(
+                id = if (json.has("id")) json.optString("id") else commandJson.optString("id"),
+                title = commandJson.optString("title"),
+                content = content,
+                updatedAt = commandJson.optLong("updatedAt", System.currentTimeMillis()),
+                lastResult = null,
+                lastRunAt = null
+            )
+        )
 
         val resp = JSONObject()
         resp.put("success", true)
@@ -259,6 +275,140 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
         resp.put("content", cmd.optString("content", ""))
         resp.put("updatedAt", cmd.optLong("updatedAt", System.currentTimeMillis()))
 
+        return newFixedLengthResponse(
+            Response.Status.OK,
+            "application/json",
+            resp.toString()
+        )
+    }
+
+    private fun handleCommandsGet(session: IHTTPSession): Response {
+        if (!isAuthorized(session)) return unauthorized()
+        val repository = CommandRepository(service)
+        val commands = repository.getCommands()
+        val array = org.json.JSONArray()
+        commands.forEach { cmd ->
+            val obj = JSONObject()
+            obj.put("id", cmd.id)
+            obj.put("title", cmd.title)
+            obj.put("content", cmd.content)
+            obj.put("updatedAt", cmd.updatedAt)
+            obj.put("lastResult", cmd.lastResult)
+            obj.put("lastRunAt", cmd.lastRunAt)
+            array.put(obj)
+        }
+        val resp = JSONObject()
+        resp.put("success", true)
+        resp.put("commands", array)
+        return newFixedLengthResponse(
+            Response.Status.OK,
+            "application/json",
+            resp.toString()
+        )
+    }
+
+    private fun handleCommandsPost(session: IHTTPSession): Response {
+        if (!isAuthorized(session)) return unauthorized()
+        val body = getRequestBody(session)
+        val json = JSONObject(body)
+        val id = json.optString("id", UUID.randomUUID().toString())
+        val title = json.optString("title", "")
+        val content = json.optString("content", "")
+        if (title.isBlank() || content.isBlank()) {
+            return newFixedLengthResponse(
+                Response.Status.BAD_REQUEST,
+                "application/json",
+                """{"success":false,"error":"title and content required"}"""
+            )
+        }
+        val updatedAt = json.optLong("updatedAt", System.currentTimeMillis())
+        val repository = CommandRepository(service)
+        repository.upsertCommand(
+            Command(
+                id = id,
+                title = title,
+                content = content,
+                updatedAt = updatedAt,
+                lastResult = json.optString("lastResult", null),
+                lastRunAt = json.optLong("lastRunAt", 0).let { if (it == 0L) null else it }
+            )
+        )
+        val resp = JSONObject()
+        resp.put("success", true)
+        resp.put("id", id)
+        return newFixedLengthResponse(
+            Response.Status.OK,
+            "application/json",
+            resp.toString()
+        )
+    }
+
+    private fun handleCommandHistoryGet(session: IHTTPSession): Response {
+        if (!isAuthorized(session)) return unauthorized()
+        val cmdId = session.parameters["id"]?.firstOrNull()
+        if (cmdId.isNullOrBlank()) {
+            return newFixedLengthResponse(
+                Response.Status.BAD_REQUEST,
+                "application/json",
+                """{"success":false,"error":"id required"}"""
+            )
+        }
+        val repository = CommandRepository(service)
+        val history = repository.getHistory(cmdId)
+        val arr = org.json.JSONArray()
+        history.forEach { h ->
+            val obj = JSONObject()
+            obj.put("id", h.id)
+            obj.put("commandId", h.commandId)
+            obj.put("contentSnapshot", h.contentSnapshot)
+            obj.put("result", h.result)
+            obj.put("message", h.message)
+            obj.put("source", h.source)
+            obj.put("timestamp", h.timestamp)
+            arr.put(obj)
+        }
+        val resp = JSONObject()
+        resp.put("success", true)
+        resp.put("history", arr)
+        return newFixedLengthResponse(
+            Response.Status.OK,
+            "application/json",
+            resp.toString()
+        )
+    }
+
+    private fun handleCommandHistoryPost(session: IHTTPSession): Response {
+        if (!isAuthorized(session)) return unauthorized()
+        val body = getRequestBody(session)
+        val json = JSONObject(body)
+        val cmdId = json.optString("commandId", "")
+        val result = json.optString("result", "")
+        val content = json.optString("contentSnapshot", "")
+        val message = json.optString("message", null)
+        val source = json.optString("source", null)
+        val timestamp = json.optLong("timestamp", System.currentTimeMillis())
+        if (cmdId.isBlank() || result.isBlank()) {
+            return newFixedLengthResponse(
+                Response.Status.BAD_REQUEST,
+                "application/json",
+                """{"success":false,"error":"commandId and result required"}"""
+            )
+        }
+        val repository = CommandRepository(service)
+        repository.addHistory(cmdId, content, result, message, source)
+        // 同步更新命令 lastResult/lastRunAt
+        repository.upsertCommand(
+            Command(
+                id = cmdId,
+                title = json.optString("title", ""),
+                content = content,
+                updatedAt = System.currentTimeMillis(),
+                lastResult = result,
+                lastRunAt = timestamp
+            )
+        )
+        val resp = JSONObject()
+        resp.put("success", true)
         return newFixedLengthResponse(
             Response.Status.OK,
             "application/json",

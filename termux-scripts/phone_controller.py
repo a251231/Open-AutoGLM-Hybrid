@@ -79,6 +79,24 @@ def fetch_pending_command(helper_url: str = "http://localhost:8080", clear: bool
         return None
 
 
+def post_command_history(command_id: str, content: str, result: str, message: Optional[str] = None, helper_url: str = "http://localhost:8080"):
+    """上报指令执行历史"""
+    if not command_id:
+        return
+    try:
+        payload = {
+            "commandId": command_id,
+            "contentSnapshot": content,
+            "result": result,
+            "message": message or "",
+            "source": "agent",
+            "timestamp": int(time.time() * 1000)
+        }
+        requests.post(f"{helper_url}/command_history", json=payload, headers=_auth_headers(), timeout=5)
+    except Exception as exc:
+        logger.debug(f"上报指令历史失败: {exc}")
+
+
 # 启动时优先尝试加载 App 配置
 load_config_from_app()
 
@@ -205,6 +223,14 @@ class PhoneController:
         
         content = cmd.get("content", "")
         ok = self.input_text(content)
+        result_str = "success" if ok else "failed"
+        post_command_history(
+            command_id=cmd.get("id") or "",
+            content=content,
+            result=result_str,
+            message=None,
+            helper_url=self.helper_url
+        )
         if ok:
             logger.info(f"已执行待办指令: {cmd.get('title') or content[:20]}")
         else:

@@ -25,6 +25,9 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : Activity() {
 
@@ -103,7 +106,8 @@ class MainActivity : Activity() {
         commandAdapter = CommandAdapter(
             onPublish = { publishCommand(it) },
             onEdit = { showCommandDialog(it) },
-            onDelete = { confirmDelete(it) }
+            onDelete = { confirmDelete(it) },
+            onDetail = { showCommandDetail(it) }
         )
 
         setupProviderSpinner()
@@ -138,6 +142,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        syncCommandsFromServer()
         handler.post(updateRunnable)
     }
 
@@ -326,6 +331,41 @@ class MainActivity : Activity() {
         val latest = commands ?: commandRepository.getCommands()
         commandAdapter.submit(latest)
         emptyCommandText.isVisible = latest.isEmpty()
+    }
+
+    private fun syncCommandsFromServer() {
+        Thread {
+            try {
+                val url = URL("http://localhost:${AutoGLMAccessibilityService.PORT}/commands")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.setRequestProperty("X-Auth-Token", getOrCreateAuthToken())
+                connection.connectTimeout = 3000
+                connection.readTimeout = 3000
+                val responseCode = connection.responseCode
+                if (responseCode == 200) {
+                    val json = connection.inputStream.bufferedReader().use { it.readText() }
+                    val obj = JSONObject(json)
+                    val arr = obj.optJSONArray("commands") ?: JSONArray()
+                    for (i in 0 until arr.length()) {
+                        val item = arr.getJSONObject(i)
+                        commandRepository.upsertCommand(
+                            Command(
+                                id = item.optString("id"),
+                                title = item.optString("title"),
+                                content = item.optString("content"),
+                                updatedAt = item.optLong("updatedAt", System.currentTimeMillis()),
+                                lastResult = item.optString("lastResult", null),
+                                lastRunAt = item.optLong("lastRunAt", 0).let { t -> if (t == 0L) null else t }
+                            )
+                        )
+                    }
+                    runOnUiThread { refreshCommands() }
+                }
+                connection.disconnect()
+            } catch (_: Exception) {
+            }
+        }.start()
     }
 
     private fun publishCommand(command: Command) {
@@ -560,5 +600,30 @@ class MainActivity : Activity() {
             prefs.edit().putString(KEY_AUTH_TOKEN, token).apply()
         }
         return token
+    }
+
+    private fun showCommandDetail(command: Command) {
+        Thread {
+            val history = commandRepository.getHistory(command.id)
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            val content = StringBuilder()
+            content.append("内容:\n${command.content}\n\n")
+            content.append("执行记录:\n")
+            if (history.isEmpty()) {
+                content.append("暂无历史记录")
+            } else {
+                history.forEach {
+                    val time = sdf.format(Date(it.timestamp))
+                    content.append("$time [${it.result}] ${it.message ?: ""}\n")
+                }
+            }
+            runOnUiThread {
+                AlertDialog.Builder(this)
+                    .setTitle(command.title)
+                    .setMessage(content.toString())
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show()
+            }
+        }.start()
     }
 }
