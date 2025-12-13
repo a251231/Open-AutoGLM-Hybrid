@@ -34,8 +34,20 @@ detect_pkg_manager() {
     elif command -v apt-get >/dev/null 2>&1; then
         PKG_UPDATE="apt-get update -y"
         PKG_INSTALL="apt-get install -y"
+    elif command -v apt >/dev/null 2>&1; then
+        PKG_UPDATE="apt update -y"
+        PKG_INSTALL="apt install -y"
+    elif command -v dnf >/dev/null 2>&1; then
+        PKG_UPDATE="dnf update -y"
+        PKG_INSTALL="dnf install -y"
+    elif command -v yum >/dev/null 2>&1; then
+        PKG_UPDATE="yum update -y"
+        PKG_INSTALL="yum install -y"
+    elif command -v pacman >/dev/null 2>&1; then
+        PKG_UPDATE="pacman -Sy --noconfirm"
+        PKG_INSTALL="pacman -S --noconfirm"
     else
-        print_error "未检测到受支持的包管理器（pkg/apt-get），请手动安装依赖：python、git、curl、wget、pip"
+        print_error "未检测到受支持的包管理器（pkg/apt/dnf/yum/pacman），请手动安装依赖：python、git、curl、wget、pip"
         exit 1
     fi
 }
