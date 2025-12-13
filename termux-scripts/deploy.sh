@@ -207,6 +207,8 @@ show_completion() {
 
 main() {
     print_header
+    # 确保脚本可执行
+    chmod +x "$0" || true
     detect_pkg_manager
     check_network
     update_packages
