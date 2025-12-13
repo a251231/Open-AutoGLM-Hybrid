@@ -15,6 +15,12 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
         private const val KEY_MODEL = "model"
         private const val KEY_PROVIDER = "provider"
 
+        private const val PREF_PENDING = "pending_command"
+        private const val KEY_PENDING_ID = "pending_id"
+        private const val KEY_PENDING_TITLE = "pending_title"
+        private const val KEY_PENDING_CONTENT = "pending_content"
+        private const val KEY_PENDING_UPDATED_AT = "pending_updated_at"
+
         private const val DEFAULT_BASE_URL = "https://api.grsai.com/v1"
         private const val DEFAULT_MODEL = "gpt-4-vision-preview"
         private const val DEFAULT_PROVIDER = "grs"
@@ -35,6 +41,8 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
                 uri == "/input" && method == Method.POST -> handleInput(session)
                 uri == "/config" && method == Method.GET -> handleConfigGet()
                 uri == "/config" && method == Method.POST -> handleConfigUpdate(session)
+                uri == "/pending_command" && method == Method.POST -> handlePendingCommandPost(session)
+                uri == "/pending_command" && method == Method.GET -> handlePendingCommandGet(session)
                 else -> newFixedLengthResponse(
                     Response.Status.NOT_FOUND,
                     "application/json",
@@ -188,6 +196,68 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
             Response.Status.OK,
             "application/json",
             resp.toString()
+        )
+    }
+
+    private fun handlePendingCommandPost(session: IHTTPSession): Response {
+        val body = getRequestBody(session)
+        val json = JSONObject(body)
+        val content = json.optString("content", "")
+        if (content.isBlank()) {
+            return newFixedLengthResponse(
+                Response.Status.BAD_REQUEST,
+                "application/json",
+                """{"success":false,"error":"content is required"}"""
+            )
+        }
+
+        val prefs = service.getSharedPreferences(PREF_PENDING, Context.MODE_PRIVATE).edit()
+        prefs.putString(KEY_PENDING_ID, json.optString("id", ""))
+        prefs.putString(KEY_PENDING_TITLE, json.optString("title", ""))
+        prefs.putString(KEY_PENDING_CONTENT, content)
+        prefs.putLong(KEY_PENDING_UPDATED_AT, json.optLong("updatedAt", System.currentTimeMillis()))
+        prefs.apply()
+
+        val resp = JSONObject()
+        resp.put("success", true)
+        return newFixedLengthResponse(
+            Response.Status.OK,
+            "application/json",
+            resp.toString()
+        )
+    }
+
+    private fun handlePendingCommandGet(session: IHTTPSession): Response {
+        val params = session.parameters
+        val clear = params["clear"]?.firstOrNull()?.toBooleanStrictOrNull() ?: true
+
+        val prefs = service.getSharedPreferences(PREF_PENDING, Context.MODE_PRIVATE)
+        val content = prefs.getString(KEY_PENDING_CONTENT, null)
+        if (content.isNullOrBlank()) {
+            return newFixedLengthResponse(
+                Response.Status.OK,
+                "application/json",
+                """{"success":false,"message":"empty"}"""
+            )
+        }
+
+        val json = JSONObject()
+        json.put("success", true)
+        json.put("id", prefs.getString(KEY_PENDING_ID, ""))
+        json.put("title", prefs.getString(KEY_PENDING_TITLE, ""))
+        json.put("content", content)
+        json.put("updatedAt", prefs.getLong(KEY_PENDING_UPDATED_AT, System.currentTimeMillis()))
+
+        if (clear) {
+            service.getSharedPreferences(PREF_PENDING, Context.MODE_PRIVATE).edit()
+                .clear()
+                .apply()
+        }
+
+        return newFixedLengthResponse(
+            Response.Status.OK,
+            "application/json",
+            json.toString()
         )
     }
 

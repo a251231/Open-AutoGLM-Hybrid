@@ -23,6 +23,8 @@
     <string name="command_input_required">请输入指令标题和内容</string>
     <string name="command_publish_success">已发布指令: %s</string>
     <string name="command_publish_failed">指令发布失败: %s</string>
+    <string name="command_enqueue_success">已加入待执行指令: %s</string>
+    <string name="command_enqueue_failed">指令入队失败: %s</string>
     <string name="empty_command_hint">还没有指令，点击新增指令从常用来开始</string>
     <string name="save">保存</string>
     <string name="cancel">取消</string>

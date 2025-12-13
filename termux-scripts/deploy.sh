@@ -87,6 +87,12 @@ install_dependencies() {
     fi
 
     eval "$PKG_INSTALL curl wget"
+    if ! command -v adb >/dev/null 2>&1; then
+        print_info "安装 ADB（android-tools/adb）..."
+        eval "$PKG_INSTALL adb" || eval "$PKG_INSTALL android-tools" || true
+    else
+        print_success "已检测到 ADB: $(adb version | head -n1)"
+    fi
     print_success "必需软件安装完成"
 }
 
@@ -96,6 +102,17 @@ install_python_packages() {
     if [ -z "$PYTHON_BIN" ]; then
         print_error "未找到可用的 python 解释器"
         exit 1
+    fi
+
+    VENV_DIR="$HOME/.autoglm-venv"
+    if [ ! -d "$VENV_DIR" ]; then
+        print_info "创建虚拟环境: $VENV_DIR"
+        "$PYTHON_BIN" -m venv "$VENV_DIR" || print_warning "创建虚拟环境失败，将使用系统 Python"
+    fi
+
+    if [ -x "$VENV_DIR/bin/python" ]; then
+        PYTHON_BIN="$VENV_DIR/bin/python"
+        print_info "使用虚拟环境 Python: $PYTHON_BIN"
     fi
 
     "$PYTHON_BIN" -m ensurepip --upgrade >/dev/null 2>&1 || true
@@ -128,10 +145,10 @@ install_autoglm() {
     cd "$HOME/Open-AutoGLM"
 
     if [ -f "requirements.txt" ]; then
-        pip install -r requirements.txt
+        "$PYTHON_BIN" -m pip install -r requirements.txt
     fi
 
-    pip install -e .
+    "$PYTHON_BIN" -m pip install -e .
     print_success "Open-AutoGLM 安装完成"
 }
 
@@ -199,12 +216,17 @@ create_launcher() {
 
     cat > "$HOME/bin/autoglm" << 'LAUNCHER_EOF'
 #!/usr/bin/env bash
+if [ -x "$HOME/.autoglm-venv/bin/python" ]; then
+  PY_BIN="$HOME/.autoglm-venv/bin/python"
+else
+  PY_BIN="python"
+fi
 if [ -f "$HOME/.autoglm/config.sh" ]; then
   # shellcheck source=/dev/null
   source "$HOME/.autoglm/config.sh"
 fi
 cd "$HOME/Open-AutoGLM" || exit 1
-python -m phone_agent.cli
+"$PY_BIN" -m phone_agent.cli
 LAUNCHER_EOF
 
     chmod +x "$HOME/bin/autoglm"

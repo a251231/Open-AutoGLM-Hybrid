@@ -20,6 +20,7 @@ import android.widget.Toast
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -308,12 +309,40 @@ class MainActivity : Activity() {
         }
 
         Thread {
-            val success = service.performInput(command.content)
+            var success = false
+            try {
+                val url = URL("http://localhost:${AutoGLMAccessibilityService.PORT}/pending_command")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.connectTimeout = 3000
+                connection.readTimeout = 3000
+
+                val payload = JSONObject()
+                payload.put("id", command.id)
+                payload.put("title", command.title)
+                payload.put("content", command.content)
+                payload.put("updatedAt", command.updatedAt)
+
+                connection.outputStream.use { os ->
+                    os.write(payload.toString().toByteArray())
+                    os.flush()
+                }
+
+                val code = connection.responseCode
+                connection.inputStream?.close()
+                connection.disconnect()
+                success = code == 200
+            } catch (_: Exception) {
+                success = false
+            }
+
             runOnUiThread {
                 val message = if (success) {
-                    getString(R.string.command_publish_success, command.title)
+                    getString(R.string.command_enqueue_success, command.title)
                 } else {
-                    getString(R.string.command_publish_failed, command.title)
+                    getString(R.string.command_enqueue_failed, command.title)
                 }
                 Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
             }

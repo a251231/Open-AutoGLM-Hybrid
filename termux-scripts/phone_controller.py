@@ -56,6 +56,21 @@ def load_config_from_app(helper_url: str = "http://localhost:8080") -> bool:
         return False
 
 
+def fetch_pending_command(helper_url: str = "http://localhost:8080", clear: bool = True) -> Optional[dict]:
+    """获取待执行指令（默认获取后清空）"""
+    try:
+        params = {"clear": "true" if clear else "false"}
+        resp = requests.get(f"{helper_url}/pending_command", params=params, timeout=2)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("success") and data.get("content"):
+                return data
+        return None
+    except Exception as exc:
+        logger.debug(f"获取待执行指令失败: {exc}")
+        return None
+
+
 # 启动时优先尝试加载 App 配置
 load_config_from_app()
 
@@ -169,6 +184,46 @@ class PhoneController:
             logger.debug(f"LADB 连接失败: {e}")
             return False
     
+    def process_pending_command(self, clear: bool = True) -> Tuple[bool, Optional[str]]:
+        """
+        从 App 获取一条待执行指令并尝试输入
+        
+        Returns:
+            (是否获取到指令且执行成功, 内容或 None)
+        """
+        cmd = fetch_pending_command(self.helper_url, clear=clear)
+        if not cmd or not cmd.get("content"):
+            return False, None
+        
+        content = cmd.get("content", "")
+        ok = self.input_text(content)
+        if ok:
+            logger.info(f"已执行待办指令: {cmd.get('title') or content[:20]}")
+        else:
+            logger.error(f"执行待办指令失败: {cmd.get('title') or content[:20]}")
+        return ok, content
+    
+    def poll_pending_commands(self, interval: int = 2, clear: bool = True, max_idle: int = 0):
+        """
+        循环轮询待执行指令
+        
+        Args:
+            interval: 轮询间隔秒
+            clear: 获取后是否清空队列
+            max_idle: 允许连续空闲次数，0 表示无限循环
+        """
+        idle = 0
+        while True:
+            ok, content = self.process_pending_command(clear=clear)
+            if content is None:
+                idle += 1
+                if max_idle and idle >= max_idle:
+                    break
+                time.sleep(interval)
+                continue
+            idle = 0
+            time.sleep(interval)
+
     def get_mode(self) -> str:
         """获取当前控制模式"""
         return self.mode
@@ -441,6 +496,11 @@ if __name__ == '__main__':
         print("测试点击...")
         success = controller.tap(500, 500)
         print(f"点击结果: {success}")
+
+        # 可选：轮询待执行指令，设置环境变量 AUTOGLM_POLL_PENDING=1 时启用
+        if os.environ.get("AUTOGLM_POLL_PENDING") == "1":
+            print("开始轮询待执行指令...(按 Ctrl+C 结束)")
+            controller.poll_pending_commands(interval=2, clear=True)
         
     except Exception as e:
         print(f"错误: {e}")
