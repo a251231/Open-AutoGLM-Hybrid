@@ -105,6 +105,12 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:text="@string/config_token_generate" />
+        <Button
+            android:id="@+id/copyTokenButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/copy_token" />
 
         <LinearLayout
             android:layout_width="match_parent"

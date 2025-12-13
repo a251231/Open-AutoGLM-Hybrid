@@ -4,6 +4,8 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -18,8 +20,12 @@ import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.isVisible
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -48,6 +54,7 @@ class MainActivity : Activity() {
     private lateinit var refreshCommandButton: Button
     private lateinit var authTokenText: TextView
     private lateinit var regenerateTokenButton: Button
+    private lateinit var copyTokenButton: Button
     private lateinit var presetNameInput: EditText
     private lateinit var presetSpinner: Spinner
     private lateinit var savePresetButton: Button
@@ -99,6 +106,7 @@ class MainActivity : Activity() {
         testConfigButton = findViewById(R.id.testConfigButton)
         authTokenText = findViewById(R.id.authTokenText)
         regenerateTokenButton = findViewById(R.id.regenerateTokenButton)
+        copyTokenButton = findViewById(R.id.copyTokenButton)
         presetNameInput = findViewById(R.id.presetNameInput)
         presetSpinner = findViewById(R.id.presetSpinner)
         savePresetButton = findViewById(R.id.savePresetButton)
@@ -132,6 +140,7 @@ class MainActivity : Activity() {
         resetConfigButton.setOnClickListener { resetConfig() }
         testConfigButton.setOnClickListener { testConfigEndpoint() }
         regenerateTokenButton.setOnClickListener { regenerateToken() }
+        copyTokenButton.setOnClickListener { copyToken() }
         savePresetButton.setOnClickListener { saveCurrentToPreset() }
         activatePresetButton.setOnClickListener { activateSelectedPreset() }
         refreshCommandButton.setOnClickListener {
@@ -140,7 +149,10 @@ class MainActivity : Activity() {
 
         commandListView.layoutManager = LinearLayoutManager(this)
         commandListView.adapter = commandAdapter
-        refreshCommands()
+        lifecycleScope.launch(Dispatchers.IO) {
+            val latest = commandRepository.getCommands()
+            refreshCommandsOnMain(latest)
+        }
         
         updateStatus()
     }
@@ -180,7 +192,7 @@ class MainActivity : Activity() {
     }
 
     private fun testConnection() {
-        Thread {
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val url = URL("http://localhost:${AutoGLMAccessibilityService.PORT}/status")
                 val connection = url.openConnection() as HttpURLConnection
@@ -188,38 +200,35 @@ class MainActivity : Activity() {
                 connection.connectTimeout = 3000
                 connection.readTimeout = 3000
 
-                try {
-                    val responseCode = connection.responseCode
-                    connection.inputStream.bufferedReader().use { it.readText() }
+                val responseCode = connection.responseCode
+                connection.inputStream.bufferedReader().use { it.readText() }
+                connection.disconnect()
 
-                    runOnUiThread {
-                        if (responseCode == 200) {
-                            Toast.makeText(
-                                this,
-                                getString(R.string.connection_success),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        } else {
-                            Toast.makeText(
-                                this,
-                                getString(R.string.connection_failed, "HTTP $responseCode"),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
+                withContext(Dispatchers.Main) {
+                    if (responseCode == 200) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            getString(R.string.connection_success),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        Toast.makeText(
+                            this@MainActivity,
+                            getString(R.string.connection_failed, "HTTP $responseCode"),
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
-                } finally {
-                    connection.disconnect()
                 }
             } catch (e: Exception) {
-                runOnUiThread {
+                withContext(Dispatchers.Main) {
                     Toast.makeText(
-                        this,
+                        this@MainActivity,
                         getString(R.string.connection_failed, e.message),
                         Toast.LENGTH_LONG
                     ).show()
                 }
             }
-        }.start()
+        }
     }
 
     private fun setupProviderSpinner() {
@@ -294,7 +303,7 @@ class MainActivity : Activity() {
 
     private fun testConfigEndpoint() {
         val baseUrl = baseUrlInput.text.toString().trim().ifBlank { DEFAULT_BASE_URL }
-        Thread {
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val url = URL(baseUrl)
                 val connection = url.openConnection() as HttpURLConnection
@@ -304,23 +313,23 @@ class MainActivity : Activity() {
                 val code = connection.responseCode
                 connection.inputStream?.close()
                 connection.disconnect()
-                runOnUiThread {
+                withContext(Dispatchers.Main) {
                     Toast.makeText(
-                        this,
+                        this@MainActivity,
                         getString(R.string.config_test_success, code),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
             } catch (e: Exception) {
-                runOnUiThread {
+                withContext(Dispatchers.Main) {
                     Toast.makeText(
-                        this,
+                        this@MainActivity,
                         getString(R.string.config_test_failed, e.message ?: "未知错误"),
                         Toast.LENGTH_LONG
                     ).show()
                 }
             }
-        }.start()
+        }
     }
 
     private fun isValidUrl(url: String): Boolean {
@@ -332,14 +341,15 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun refreshCommands(commands: List<Command>? = null) {
-        val latest = commands ?: commandRepository.getCommands()
-        commandAdapter.submit(latest)
-        emptyCommandText.isVisible = latest.isEmpty()
+    private suspend fun refreshCommandsOnMain(commands: List<Command>) {
+        withContext(Dispatchers.Main) {
+            commandAdapter.submit(commands)
+            emptyCommandText.isVisible = commands.isEmpty()
+        }
     }
 
     private fun syncCommandsFromServer(showToast: Boolean = false) {
-        Thread {
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val url = URL("http://localhost:${AutoGLMAccessibilityService.PORT}/commands")
                 val connection = url.openConnection() as HttpURLConnection
@@ -365,20 +375,23 @@ class MainActivity : Activity() {
                             )
                         )
                     }
-                    runOnUiThread {
-                        refreshCommands()
-                        if (showToast) Toast.makeText(this, getString(R.string.sync_success), Toast.LENGTH_SHORT).show()
+                    val latest = commandRepository.getCommands()
+                    refreshCommandsOnMain(latest)
+                    if (showToast) {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(this@MainActivity, getString(R.string.sync_success), Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
                 connection.disconnect()
             } catch (e: Exception) {
                 if (showToast) {
-                    runOnUiThread {
-                        Toast.makeText(this, getString(R.string.sync_failed, e.message ?: ""), Toast.LENGTH_LONG).show()
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@MainActivity, getString(R.string.sync_failed, e.message ?: ""), Toast.LENGTH_LONG).show()
                     }
                 }
             }
-        }.start()
+        }
     }
 
     private fun publishCommand(command: Command) {
@@ -388,7 +401,7 @@ class MainActivity : Activity() {
             return
         }
 
-        Thread {
+        lifecycleScope.launch(Dispatchers.IO) {
             var success = false
             try {
                 val url = URL("http://localhost:${AutoGLMAccessibilityService.PORT}/command")
@@ -419,15 +432,15 @@ class MainActivity : Activity() {
                 success = false
             }
 
-            runOnUiThread {
+            withContext(Dispatchers.Main) {
                 val message = if (success) {
                     getString(R.string.command_enqueue_success, command.title)
                 } else {
                     getString(R.string.command_enqueue_failed, command.title)
                 }
-                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
             }
-        }.start()
+        }
     }
 
     private fun regenerateToken() {
@@ -435,6 +448,14 @@ class MainActivity : Activity() {
         prefs.edit().putString(KEY_AUTH_TOKEN, token).apply()
         authTokenText.text = "${getString(R.string.config_token_label)}:\n$token"
         Toast.makeText(this, getString(R.string.config_token_regenerated), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun copyToken() {
+        val token = prefs.getString(KEY_AUTH_TOKEN, "") ?: ""
+        if (token.isBlank()) return
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("AUTOGLM_AUTH_TOKEN", token))
+        Toast.makeText(this, getString(R.string.copy_success), Toast.LENGTH_SHORT).show()
     }
 
     private fun saveCurrentToPreset() {
@@ -581,12 +602,14 @@ class MainActivity : Activity() {
                     return@setOnClickListener
                 }
 
-                val updated = if (command == null) {
-                    commandRepository.addCommand(title, content)
-                } else {
-                    commandRepository.updateCommand(command.id, title, content)
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val updated = if (command == null) {
+                        commandRepository.addCommand(title, content)
+                    } else {
+                        commandRepository.updateCommand(command.id, title, content)
+                    }
+                    refreshCommandsOnMain(updated)
                 }
-                refreshCommands(updated)
                 dialog.dismiss()
             }
         }
@@ -599,8 +622,10 @@ class MainActivity : Activity() {
             .setTitle(R.string.delete_command)
             .setMessage(getString(R.string.delete_command_confirm, command.title))
             .setPositiveButton(R.string.delete) { _, _ ->
-                val updated = commandRepository.deleteCommand(command.id)
-                refreshCommands(updated)
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val updated = commandRepository.deleteCommand(command.id)
+                    refreshCommandsOnMain(updated)
+                }
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
@@ -616,7 +641,7 @@ class MainActivity : Activity() {
     }
 
     private fun showCommandDetail(command: Command) {
-        Thread {
+        lifecycleScope.launch(Dispatchers.IO) {
             val history = commandRepository.getHistory(command.id)
             val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
             val content = StringBuilder()
@@ -630,13 +655,13 @@ class MainActivity : Activity() {
                     content.append("$time [${it.result}] ${it.message ?: ""}\n")
                 }
             }
-            runOnUiThread {
-                AlertDialog.Builder(this)
+            withContext(Dispatchers.Main) {
+                AlertDialog.Builder(this@MainActivity)
                     .setTitle(command.title)
                     .setMessage(content.toString())
                     .setPositiveButton(android.R.string.ok, null)
                     .show()
             }
-        }.start()
+        }
     }
 }

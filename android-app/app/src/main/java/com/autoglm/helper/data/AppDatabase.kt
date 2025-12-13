@@ -25,7 +25,6 @@ abstract class AppDatabase : RoomDatabase() {
                     "autoglm.db"
                 )
                     .fallbackToDestructiveMigration()
-                    .allowMainThreadQueries()
                     .build()
                     .also { INSTANCE = it }
             }

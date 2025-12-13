@@ -56,6 +56,8 @@
     <string name="refresh">刷新</string>
     <string name="sync_success">同步成功</string>
     <string name="sync_failed">同步失败: %s</string>
+    <string name="copy_token">复制 Token</string>
+    <string name="copy_success">已复制到剪贴板</string>
     <string-array name="provider_options">
         <item>grs</item>
         <item>siliconflow</item>
