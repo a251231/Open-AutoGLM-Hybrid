@@ -16,6 +16,7 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
         private const val KEY_MODEL = "model"
         private const val KEY_PROVIDER = "provider"
         private const val KEY_AUTH_TOKEN = "auth_token"
+        private const val KEY_ACTIVE_PRESET = "active_preset"
 
         private const val DEFAULT_BASE_URL = "https://api.grsai.com/v1"
         private const val DEFAULT_MODEL = "gpt-4-vision-preview"
@@ -169,6 +170,7 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
         json.put("base_url", prefs.getString(KEY_BASE_URL, DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL)
         json.put("model", prefs.getString(KEY_MODEL, DEFAULT_MODEL) ?: DEFAULT_MODEL)
         json.put("provider", prefs.getString(KEY_PROVIDER, DEFAULT_PROVIDER) ?: DEFAULT_PROVIDER)
+        json.put("preset_active", prefs.getString(KEY_ACTIVE_PRESET, "") ?: "")
 
         return newFixedLengthResponse(
             Response.Status.OK,

@@ -46,6 +46,13 @@
     <string name="config_token_label">鉴权 Token (需在 Termux 配置 AUTOGLM_AUTH_TOKEN)</string>
     <string name="config_token_generate">重新生成 Token</string>
     <string name="config_token_regenerated">已生成新 Token</string>
+    <string name="preset_title">配置预设</string>
+    <string name="preset_name_hint">预设名称，如：默认/GRS/硅基</string>
+    <string name="preset_save">保存为预设</string>
+    <string name="preset_activate">激活预设</string>
+    <string name="preset_saved">预设已保存并激活: %s</string>
+    <string name="preset_activated">已激活预设: %s</string>
+    <string name="preset_name_required">请输入预设名称</string>
     <string-array name="provider_options">
         <item>grs</item>
         <item>siliconflow</item>

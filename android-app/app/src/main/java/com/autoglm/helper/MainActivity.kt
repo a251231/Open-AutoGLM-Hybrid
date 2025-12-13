@@ -20,6 +20,7 @@ import android.widget.Toast
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -43,6 +44,10 @@ class MainActivity : Activity() {
     private lateinit var testConfigButton: Button
     private lateinit var authTokenText: TextView
     private lateinit var regenerateTokenButton: Button
+    private lateinit var presetNameInput: EditText
+    private lateinit var presetSpinner: Spinner
+    private lateinit var savePresetButton: Button
+    private lateinit var activatePresetButton: Button
     private lateinit var commandRepository: CommandRepository
     private lateinit var commandAdapter: CommandAdapter
     private val prefs: SharedPreferences by lazy { getSharedPreferences(PREF_NAME, MODE_PRIVATE) }
@@ -62,6 +67,8 @@ class MainActivity : Activity() {
         private const val KEY_MODEL = "model"
         private const val KEY_PROVIDER = "provider"
         private const val KEY_AUTH_TOKEN = "auth_token"
+        private const val KEY_ACTIVE_PRESET = "active_preset"
+        private const val KEY_PRESETS = "config_presets"
 
         private const val DEFAULT_BASE_URL = "https://api.grsai.com/v1"
         private const val DEFAULT_MODEL = "gpt-4-vision-preview"
@@ -88,6 +95,10 @@ class MainActivity : Activity() {
         testConfigButton = findViewById(R.id.testConfigButton)
         authTokenText = findViewById(R.id.authTokenText)
         regenerateTokenButton = findViewById(R.id.regenerateTokenButton)
+        presetNameInput = findViewById(R.id.presetNameInput)
+        presetSpinner = findViewById(R.id.presetSpinner)
+        savePresetButton = findViewById(R.id.savePresetButton)
+        activatePresetButton = findViewById(R.id.activatePresetButton)
         commandRepository = CommandRepository(this)
         commandAdapter = CommandAdapter(
             onPublish = { publishCommand(it) },
@@ -96,6 +107,7 @@ class MainActivity : Activity() {
         )
 
         setupProviderSpinner()
+        refreshPresetSpinner()
         loadConfigToUi()
         
         openSettingsButton.setOnClickListener {
@@ -114,6 +126,8 @@ class MainActivity : Activity() {
         resetConfigButton.setOnClickListener { resetConfig() }
         testConfigButton.setOnClickListener { testConfigEndpoint() }
         regenerateTokenButton.setOnClickListener { regenerateToken() }
+        savePresetButton.setOnClickListener { saveCurrentToPreset() }
+        activatePresetButton.setOnClickListener { activateSelectedPreset() }
 
         commandListView.layoutManager = LinearLayoutManager(this)
         commandListView.adapter = commandAdapter
@@ -223,6 +237,10 @@ class MainActivity : Activity() {
         modelInput.setText(model)
         providerSpinner.setSelection(index)
         authTokenText.text = "${getString(R.string.config_token_label)}:\n$authToken"
+        val activePreset = prefs.getString(KEY_ACTIVE_PRESET, "") ?: ""
+        presetNameInput.setText(activePreset)
+        refreshPresetSpinner()
+        setSpinnerSelection(presetSpinner, activePreset)
     }
 
     private fun saveConfig() {
@@ -364,6 +382,125 @@ class MainActivity : Activity() {
         prefs.edit().putString(KEY_AUTH_TOKEN, token).apply()
         authTokenText.text = "${getString(R.string.config_token_label)}:\n$token"
         Toast.makeText(this, getString(R.string.config_token_regenerated), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun saveCurrentToPreset() {
+        val name = presetNameInput.text.toString().trim()
+        if (name.isBlank()) {
+            Toast.makeText(this, getString(R.string.preset_name_required), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val presets = loadPresets().toMutableList().filter { it.first != name }.toMutableList()
+        presets.add(0, name to collectConfig())
+        persistPresets(presets)
+        prefs.edit().putString(KEY_ACTIVE_PRESET, name).apply()
+        refreshPresetSpinner()
+        setSpinnerSelection(presetSpinner, name)
+        Toast.makeText(this, getString(R.string.preset_saved, name), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun activateSelectedPreset() {
+        val name = presetSpinner.selectedItem?.toString()?.trim().orEmpty()
+        if (name.isBlank()) {
+            Toast.makeText(this, getString(R.string.preset_name_required), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val presets = loadPresets().toMap()
+        val data = presets[name] ?: return
+        applyConfig(data)
+        prefs.edit().putString(KEY_ACTIVE_PRESET, name).apply()
+        presetNameInput.setText(name)
+        Toast.makeText(this, getString(R.string.preset_activated, name), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun collectConfig(): Map<String, String> {
+        val provider = providerSpinner.selectedItem?.toString()?.trim() ?: DEFAULT_PROVIDER
+        return mapOf(
+            KEY_API_KEY to apiKeyInput.text.toString().trim(),
+            KEY_BASE_URL to baseUrlInput.text.toString().trim().ifBlank { DEFAULT_BASE_URL },
+            KEY_MODEL to modelInput.text.toString().trim().ifBlank { DEFAULT_MODEL },
+            KEY_PROVIDER to provider
+        )
+    }
+
+    private fun applyConfig(data: Map<String, String>) {
+        val apiKey = data[KEY_API_KEY].orEmpty()
+        val baseUrl = data[KEY_BASE_URL] ?: DEFAULT_BASE_URL
+        val model = data[KEY_MODEL] ?: DEFAULT_MODEL
+        val provider = data[KEY_PROVIDER] ?: DEFAULT_PROVIDER
+        val providers = resources.getStringArray(R.array.provider_options)
+        val index = providers.indexOf(provider).takeIf { it >= 0 } ?: 0
+
+        apiKeyInput.setText(apiKey)
+        baseUrlInput.setText(baseUrl)
+        modelInput.setText(model)
+        providerSpinner.setSelection(index)
+
+        prefs.edit()
+            .putString(KEY_API_KEY, apiKey)
+            .putString(KEY_BASE_URL, baseUrl)
+            .putString(KEY_MODEL, model)
+            .putString(KEY_PROVIDER, provider)
+            .apply()
+    }
+
+    private fun loadPresets(): List<Pair<String, Map<String, String>>> {
+        val raw = prefs.getString(KEY_PRESETS, "[]") ?: "[]"
+        return try {
+            val arr = JSONArray(raw)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val name = obj.optString("name", "")
+                    if (name.isBlank()) continue
+                    add(
+                        name to mapOf(
+                            KEY_API_KEY to obj.optString(KEY_API_KEY, ""),
+                            KEY_BASE_URL to obj.optString(KEY_BASE_URL, DEFAULT_BASE_URL),
+                            KEY_MODEL to obj.optString(KEY_MODEL, DEFAULT_MODEL),
+                            KEY_PROVIDER to obj.optString(KEY_PROVIDER, DEFAULT_PROVIDER)
+                        )
+                    )
+                }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun persistPresets(presets: List<Pair<String, Map<String, String>>>) {
+        val arr = JSONArray()
+        presets.forEach { (name, data) ->
+            val obj = JSONObject()
+            obj.put("name", name)
+            obj.put(KEY_API_KEY, data[KEY_API_KEY].orEmpty())
+            obj.put(KEY_BASE_URL, data[KEY_BASE_URL] ?: DEFAULT_BASE_URL)
+            obj.put(KEY_MODEL, data[KEY_MODEL] ?: DEFAULT_MODEL)
+            obj.put(KEY_PROVIDER, data[KEY_PROVIDER] ?: DEFAULT_PROVIDER)
+            arr.put(obj)
+        }
+        prefs.edit().putString(KEY_PRESETS, arr.toString()).apply()
+    }
+
+    private fun refreshPresetSpinner() {
+        val presets = loadPresets().map { it.first }
+        val adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_item,
+            presets.ifEmpty { listOf(getString(R.string.preset_title)) }
+        )
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        presetSpinner.adapter = adapter
+    }
+
+    private fun setSpinnerSelection(spinner: Spinner, value: String) {
+        val adapter = spinner.adapter ?: return
+        for (i in 0 until adapter.count) {
+            if (adapter.getItem(i).toString() == value) {
+                spinner.setSelection(i)
+                break
+            }
+        }
     }
 
     private fun showCommandDialog(command: Command? = null) {
