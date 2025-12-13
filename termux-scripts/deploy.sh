@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# Open-AutoGLM 混合方案 - 一键部署脚本（通用环境，不再限制 Termux）
-# 版本: 1.1.0
+# Open-AutoGLM 混合方案 - 一键部署脚本（通用环境）
+# 版本: 1.2.0
 
 set -euo pipefail
 
@@ -21,12 +21,12 @@ print_header() {
     echo ""
     echo "============================================================"
     echo "  Open-AutoGLM 混合方案 - 一键部署"
-    echo "  版本: 1.1.0"
+    echo "  版本: 1.2.0"
     echo "============================================================"
     echo ""
 }
 
-# 选择包管理器（优先 pkg，其次 apt）
+# 选择包管理器
 detect_pkg_manager() {
     if command -v pkg >/dev/null 2>&1; then
         PKG_UPDATE="pkg update -y"
@@ -118,32 +118,45 @@ install_autoglm() {
 download_hybrid_scripts() {
     print_info "准备混合方案脚本..."
     mkdir -p "$HOME/.autoglm"
-
-    # TODO: 如果有远端版本，替换为实际下载链接
     cat > "$HOME/.autoglm/phone_controller.py" << 'PYTHON_EOF'
 # 占位文件，如有更新请替换为实际发布版本
 pass
 PYTHON_EOF
-
     print_success "混合方案脚本就绪"
 }
 
-configure_grsai() {
-    print_info "配置 GRS AI..."
-    echo ""
-    read -r -p "请输入您的 GRS AI API Key (留空可跳过): " api_key
+configure_llm() {
+    print_info "配置 LLM 服务提供商..."
+    echo "选择提供商:"
+    echo "  1) GRS (默认)"
+    echo "  2) 硅基流动"
+    read -r -p "请输入序号 [1/2]: " provider_choice
 
-    if [ -z "$api_key" ]; then
-        print_warning "未输入 API Key，跳过配置。可在稍后手动设置 PHONE_AGENT_API_KEY 环境变量。"
-        return
+    PROVIDER="grs"
+    BASE_URL="https://api.grsai.com/v1"
+    DEFAULT_MODEL="gpt-4-vision-preview"
+    if [ "$provider_choice" = "2" ]; then
+        PROVIDER="siliconflow"
+        BASE_URL="https://api.siliconflow.cn/v1"
+        DEFAULT_MODEL="zai-org/GLM-4.6"
     fi
+
+    read -r -p "请输入 API Key (必填): " api_key
+    if [ -z "$api_key" ]; then
+        print_error "API Key 不能为空"
+        exit 1
+    fi
+
+    read -r -p "请输入模型名称(回车使用默认: ${DEFAULT_MODEL}): " model_input
+    MODEL="${model_input:-$DEFAULT_MODEL}"
 
     cat > "$HOME/.autoglm/config.sh" << EOF
 #!/usr/bin/env bash
-# GRS AI 配置
-export PHONE_AGENT_BASE_URL="https://api.grsai.com/v1"
-export PHONE_AGENT_API_KEY="$api_key"
-export PHONE_AGENT_MODEL="gpt-4-vision-preview"
+# LLM 配置
+export PHONE_AGENT_PROVIDER="${PROVIDER}"
+export PHONE_AGENT_BASE_URL="${BASE_URL}"
+export PHONE_AGENT_API_KEY="${api_key}"
+export PHONE_AGENT_MODEL="${MODEL}"
 
 # AutoGLM Helper 配置
 export AUTOGLM_HELPER_URL="http://localhost:8080"
@@ -155,10 +168,9 @@ EOF
         echo "source ~/.autoglm/config.sh" >> "$HOME/.bashrc"
     fi
 
-    # 立即加载
     # shellcheck source=/dev/null
     source "$HOME/.autoglm/config.sh"
-    print_success "GRS AI 配置完成"
+    print_success "LLM 配置完成（提供商: ${PROVIDER}, 模型: ${MODEL}）"
 }
 
 create_launcher() {
@@ -167,12 +179,10 @@ create_launcher() {
 
     cat > "$HOME/bin/autoglm" << 'LAUNCHER_EOF'
 #!/usr/bin/env bash
-# 加载配置
 if [ -f "$HOME/.autoglm/config.sh" ]; then
   # shellcheck source=/dev/null
   source "$HOME/.autoglm/config.sh"
 fi
-# 启动 AutoGLM
 cd "$HOME/Open-AutoGLM" || exit 1
 python -m phone_agent.cli
 LAUNCHER_EOF
@@ -207,8 +217,6 @@ show_completion() {
 
 main() {
     print_header
-    # 确保脚本可执行
-    chmod +x "$0" || true
     detect_pkg_manager
     check_network
     update_packages
@@ -217,7 +225,7 @@ main() {
     download_autoglm
     install_autoglm
     download_hybrid_scripts
-    configure_grsai
+    configure_llm
     create_launcher
     check_helper_app
     show_completion
