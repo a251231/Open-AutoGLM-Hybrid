@@ -401,7 +401,7 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
             Command(
                 id = cmdId,
                 title = json.optString("title", ""),
-                content = content,
+                content = if (content.isNotBlank()) content else json.optString("content", ""),
                 updatedAt = System.currentTimeMillis(),
                 lastResult = result,
                 lastRunAt = timestamp

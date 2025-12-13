@@ -11,6 +11,9 @@ interface CommandDao {
     @Query("SELECT * FROM commands ORDER BY updatedAt DESC")
     fun getAll(): List<CommandEntity>
 
+    @Query("SELECT * FROM commands WHERE id = :id LIMIT 1")
+    fun getById(id: String): CommandEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(command: CommandEntity)
 

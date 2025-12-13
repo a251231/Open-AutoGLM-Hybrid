@@ -41,7 +41,16 @@ class CommandRepository(context: Context) {
     }
 
     fun upsertCommand(command: Command) {
-        commandDao.insert(CommandEntity.fromDomain(command))
+        val existing = commandDao.getById(command.id)
+        val merged = Command(
+            id = command.id,
+            title = if (command.title.isNotBlank()) command.title else existing?.title ?: command.title,
+            content = if (command.content.isNotBlank()) command.content else existing?.content ?: command.content,
+            updatedAt = command.updatedAt,
+            lastResult = command.lastResult ?: existing?.lastResult,
+            lastRunAt = command.lastRunAt ?: existing?.lastRunAt
+        )
+        commandDao.insert(CommandEntity.fromDomain(merged))
     }
 
     fun addHistory(commandId: String, contentSnapshot: String, result: String, message: String?, source: String?) {
