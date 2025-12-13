@@ -26,11 +26,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger('PhoneController')
 
+AUTH_TOKEN = os.environ.get("AUTOGLM_AUTH_TOKEN", "")
+
+
+def _auth_headers() -> dict:
+    return {"X-Auth-Token": AUTH_TOKEN} if AUTH_TOKEN else {}
+
 
 def load_config_from_app(helper_url: str = "http://localhost:8080") -> bool:
     """从 App 拉取配置并注入环境变量"""
     try:
-        resp = requests.get(f"{helper_url}/config", timeout=2)
+        resp = requests.get(f"{helper_url}/config", headers=_auth_headers(), timeout=2)
         if resp.status_code == 200:
             data = resp.json()
             api_key = data.get("api_key")
@@ -60,11 +66,13 @@ def fetch_pending_command(helper_url: str = "http://localhost:8080", clear: bool
     """获取待执行指令（默认获取后清空）"""
     try:
         params = {"clear": "true" if clear else "false"}
-        resp = requests.get(f"{helper_url}/pending_command", params=params, timeout=2)
+        resp = requests.get(f"{helper_url}/command", params=params, headers=_auth_headers(), timeout=2)
         if resp.status_code == 200:
             data = resp.json()
             if data.get("success") and data.get("content"):
                 return data
+        elif resp.status_code == 401:
+            logger.error("获取指令失败：未授权。请在环境变量中配置 AUTOGLM_AUTH_TOKEN 与 App 显示的 Token 一致")
         return None
     except Exception as exc:
         logger.debug(f"获取待执行指令失败: {exc}")

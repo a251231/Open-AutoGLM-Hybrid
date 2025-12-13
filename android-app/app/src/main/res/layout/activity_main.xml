@@ -90,6 +90,22 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp" />
 
+        <TextView
+            android:id="@+id/authTokenText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/config_token_label"
+            android:textSize="12sp"
+            android:textIsSelectable="true" />
+
+        <Button
+            android:id="@+id/regenerateTokenButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/config_token_generate" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

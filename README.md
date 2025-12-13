@@ -85,8 +85,9 @@ chmod +x deploy.sh
 
 ### 配置与指令入队/拉取流程
 - 在 AutoGLM Helper App 内填写 API Key / Base URL / Model / Provider 并保存（本地存储，不上传）。
-- App 内“发布”按钮会将指令入队（/pending_command），不会直接写入前台输入框。
-- Python 端启动后会轮询 /pending_command 并执行（参考 termux-scripts/phone_controller.py 的 `process_pending_command` / `poll_pending_commands`）。
+- App 内“发布”按钮会将指令入队（/command），不会直接写入前台输入框。
+- App 首次启动会生成本地鉴权 Token，请在 App 配置页查看，并在 Termux 中设置 `AUTOGLM_AUTH_TOKEN=<该 Token>`。
+- Python 端启动后会轮询 /command 并执行（参考 termux-scripts/phone_controller.py 的 `process_pending_command` / `poll_pending_commands`）。
 
 ### Termux 环境与 venv
 - 部署脚本会尝试创建并使用 `~/.autoglm-venv`，在其中安装依赖并运行。

@@ -241,6 +241,7 @@ LAUNCHER_EOF
 check_helper_app() {
     print_info "请确保已安装并开启 AutoGLM Helper (无障碍服务)。"
     echo "如需检测连接，可手动执行: curl http://localhost:8080/status"
+    echo "鉴权提示: App 首次启动会生成 Token，请在 Termux 中设置环境变量 AUTOGLM_AUTH_TOKEN=该 Token 后再运行。"
 }
 
 show_completion() {

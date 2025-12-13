@@ -43,6 +43,9 @@
     <string name="config_base_url_invalid">请输入有效的 Base URL</string>
     <string name="config_test_success">接口可达 (HTTP %1$d)</string>
     <string name="config_test_failed">接口不可达: %1$s</string>
+    <string name="config_token_label">鉴权 Token (需在 Termux 配置 AUTOGLM_AUTH_TOKEN)</string>
+    <string name="config_token_generate">重新生成 Token</string>
+    <string name="config_token_regenerated">已生成新 Token</string>
     <string-array name="provider_options">
         <item>grs</item>
         <item>siliconflow</item>

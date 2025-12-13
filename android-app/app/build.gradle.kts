@@ -15,6 +15,22 @@ android {
         versionName = "1.0.0"
     }
 
+    signingConfigs {
+        create("release") {
+            val storeFilePath = System.getenv("KEYSTORE_PATH") ?: System.getenv("KEYSTORE_FILE")
+            val storePwd = System.getenv("KEYSTORE_PASSWORD") ?: System.getenv("STORE_PASSWORD")
+            val alias = System.getenv("KEY_ALIAS") ?: System.getenv("KEYSTORE_ALIAS")
+            val keyPwd = System.getenv("KEY_PASSWORD") ?: System.getenv("KEYSTORE_KEY_PASSWORD")
+
+            if (!storeFilePath.isNullOrBlank() && !storePwd.isNullOrBlank() && !alias.isNullOrBlank() && !keyPwd.isNullOrBlank()) {
+                storeFile = file(storeFilePath)
+                storePassword = storePwd
+                keyAlias = alias
+                keyPassword = keyPwd
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -22,6 +38,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -41,9 +58,9 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     
-    // NanoHTTPD - ÇáÁ¿¼¶HTTP ·şÎñÆ÷
+    // NanoHTTPD - è½»é‡çº§HTTP æœåŠ¡å™¨
     implementation("org.nanohttpd:nanohttpd:2.3.1")
     
-    // JSON ´¦Àí (Android ×Ô´ø£¬µ«ÏÔÊ½ÉùÃ÷)
+    // JSON å¤„ç† (Android è‡ªå¸¦ï¼Œä½†æ˜¾å¼å£°æ˜)
     // implementation("org.json:json:20230227")
 }

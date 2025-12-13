@@ -23,6 +23,7 @@ import androidx.recyclerview.widget.RecyclerView
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.UUID
 
 class MainActivity : Activity() {
 
@@ -40,6 +41,8 @@ class MainActivity : Activity() {
     private lateinit var saveConfigButton: Button
     private lateinit var resetConfigButton: Button
     private lateinit var testConfigButton: Button
+    private lateinit var authTokenText: TextView
+    private lateinit var regenerateTokenButton: Button
     private lateinit var commandRepository: CommandRepository
     private lateinit var commandAdapter: CommandAdapter
     private val prefs: SharedPreferences by lazy { getSharedPreferences(PREF_NAME, MODE_PRIVATE) }
@@ -58,6 +61,7 @@ class MainActivity : Activity() {
         private const val KEY_BASE_URL = "base_url"
         private const val KEY_MODEL = "model"
         private const val KEY_PROVIDER = "provider"
+        private const val KEY_AUTH_TOKEN = "auth_token"
 
         private const val DEFAULT_BASE_URL = "https://api.grsai.com/v1"
         private const val DEFAULT_MODEL = "gpt-4-vision-preview"
@@ -82,6 +86,8 @@ class MainActivity : Activity() {
         saveConfigButton = findViewById(R.id.saveConfigButton)
         resetConfigButton = findViewById(R.id.resetConfigButton)
         testConfigButton = findViewById(R.id.testConfigButton)
+        authTokenText = findViewById(R.id.authTokenText)
+        regenerateTokenButton = findViewById(R.id.regenerateTokenButton)
         commandRepository = CommandRepository(this)
         commandAdapter = CommandAdapter(
             onPublish = { publishCommand(it) },
@@ -107,6 +113,7 @@ class MainActivity : Activity() {
         saveConfigButton.setOnClickListener { saveConfig() }
         resetConfigButton.setOnClickListener { resetConfig() }
         testConfigButton.setOnClickListener { testConfigEndpoint() }
+        regenerateTokenButton.setOnClickListener { regenerateToken() }
 
         commandListView.layoutManager = LinearLayoutManager(this)
         commandListView.adapter = commandAdapter
@@ -207,6 +214,7 @@ class MainActivity : Activity() {
         val baseUrl = prefs.getString(KEY_BASE_URL, DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL
         val model = prefs.getString(KEY_MODEL, DEFAULT_MODEL) ?: DEFAULT_MODEL
         val provider = prefs.getString(KEY_PROVIDER, DEFAULT_PROVIDER) ?: DEFAULT_PROVIDER
+        val authToken = getOrCreateAuthToken()
         val providers = resources.getStringArray(R.array.provider_options)
         val index = providers.indexOf(provider).takeIf { it >= 0 } ?: 0
 
@@ -214,6 +222,7 @@ class MainActivity : Activity() {
         baseUrlInput.setText(baseUrl)
         modelInput.setText(model)
         providerSpinner.setSelection(index)
+        authTokenText.text = "${getString(R.string.config_token_label)}:\n$authToken"
     }
 
     private fun saveConfig() {
@@ -311,11 +320,12 @@ class MainActivity : Activity() {
         Thread {
             var success = false
             try {
-                val url = URL("http://localhost:${AutoGLMAccessibilityService.PORT}/pending_command")
+                val url = URL("http://localhost:${AutoGLMAccessibilityService.PORT}/command")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "POST"
                 connection.doOutput = true
                 connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("X-Auth-Token", getOrCreateAuthToken())
                 connection.connectTimeout = 3000
                 connection.readTimeout = 3000
 
@@ -347,6 +357,13 @@ class MainActivity : Activity() {
                 Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
             }
         }.start()
+    }
+
+    private fun regenerateToken() {
+        val token = UUID.randomUUID().toString().replace("-", "")
+        prefs.edit().putString(KEY_AUTH_TOKEN, token).apply()
+        authTokenText.text = "${getString(R.string.config_token_label)}:\n$token"
+        Toast.makeText(this, getString(R.string.config_token_regenerated), Toast.LENGTH_SHORT).show()
     }
 
     private fun showCommandDialog(command: Command? = null) {
@@ -397,5 +414,14 @@ class MainActivity : Activity() {
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
+    }
+
+    private fun getOrCreateAuthToken(): String {
+        var token = prefs.getString(KEY_AUTH_TOKEN, null)
+        if (token.isNullOrBlank()) {
+            token = UUID.randomUUID().toString().replace("-", "")
+            prefs.edit().putString(KEY_AUTH_TOKEN, token).apply()
+        }
+        return token
     }
 }

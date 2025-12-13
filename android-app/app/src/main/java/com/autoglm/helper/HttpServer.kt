@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import fi.iki.elonen.NanoHTTPD
 import org.json.JSONObject
+import java.util.UUID
 
 class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8080) : NanoHTTPD(port) {
     
@@ -14,16 +15,14 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
         private const val KEY_BASE_URL = "base_url"
         private const val KEY_MODEL = "model"
         private const val KEY_PROVIDER = "provider"
-
-        private const val PREF_PENDING = "pending_command"
-        private const val KEY_PENDING_ID = "pending_id"
-        private const val KEY_PENDING_TITLE = "pending_title"
-        private const val KEY_PENDING_CONTENT = "pending_content"
-        private const val KEY_PENDING_UPDATED_AT = "pending_updated_at"
+        private const val KEY_AUTH_TOKEN = "auth_token"
 
         private const val DEFAULT_BASE_URL = "https://api.grsai.com/v1"
         private const val DEFAULT_MODEL = "gpt-4-vision-preview"
         private const val DEFAULT_PROVIDER = "grs"
+
+        @Volatile
+        private var inMemoryCommand: JSONObject? = null
     }
 
     override fun serve(session: IHTTPSession): Response {
@@ -39,10 +38,13 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
                 uri == "/tap" && method == Method.POST -> handleTap(session)
                 uri == "/swipe" && method == Method.POST -> handleSwipe(session)
                 uri == "/input" && method == Method.POST -> handleInput(session)
-                uri == "/config" && method == Method.GET -> handleConfigGet()
+                uri == "/config" && method == Method.GET -> handleConfigGet(session)
                 uri == "/config" && method == Method.POST -> handleConfigUpdate(session)
-                uri == "/pending_command" && method == Method.POST -> handlePendingCommandPost(session)
-                uri == "/pending_command" && method == Method.GET -> handlePendingCommandGet(session)
+                uri == "/command" && method == Method.POST -> handleCommandPost(session)
+                uri == "/command" && method == Method.GET -> handleCommandGet(session)
+                // 兼容旧接口
+                uri == "/pending_command" && method == Method.POST -> handleCommandPost(session)
+                uri == "/pending_command" && method == Method.GET -> handleCommandGet(session)
                 else -> newFixedLengthResponse(
                     Response.Status.NOT_FOUND,
                     "application/json",
@@ -159,7 +161,8 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
         )
     }
 
-    private fun handleConfigGet(): Response {
+    private fun handleConfigGet(session: IHTTPSession): Response {
+        if (!isAuthorized(session)) return unauthorized()
         val prefs = service.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         val json = JSONObject()
         json.put("api_key", prefs.getString(KEY_API_KEY, "") ?: "")
@@ -175,6 +178,7 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
     }
 
     private fun handleConfigUpdate(session: IHTTPSession): Response {
+        if (!isAuthorized(session)) return unauthorized()
         val body = getRequestBody(session)
         val json = JSONObject(body)
 
@@ -199,7 +203,8 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
         )
     }
 
-    private fun handlePendingCommandPost(session: IHTTPSession): Response {
+    private fun handleCommandPost(session: IHTTPSession): Response {
+        if (!isAuthorized(session)) return unauthorized()
         val body = getRequestBody(session)
         val json = JSONObject(body)
         val content = json.optString("content", "")
@@ -211,12 +216,12 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
             )
         }
 
-        val prefs = service.getSharedPreferences(PREF_PENDING, Context.MODE_PRIVATE).edit()
-        prefs.putString(KEY_PENDING_ID, json.optString("id", ""))
-        prefs.putString(KEY_PENDING_TITLE, json.optString("title", ""))
-        prefs.putString(KEY_PENDING_CONTENT, content)
-        prefs.putLong(KEY_PENDING_UPDATED_AT, json.optLong("updatedAt", System.currentTimeMillis()))
-        prefs.apply()
+        val commandJson = JSONObject()
+        commandJson.put("id", json.optString("id", ""))
+        commandJson.put("title", json.optString("title", ""))
+        commandJson.put("content", content)
+        commandJson.put("updatedAt", json.optLong("updatedAt", System.currentTimeMillis()))
+        inMemoryCommand = commandJson
 
         val resp = JSONObject()
         resp.put("success", true)
@@ -227,13 +232,13 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
         )
     }
 
-    private fun handlePendingCommandGet(session: IHTTPSession): Response {
+    private fun handleCommandGet(session: IHTTPSession): Response {
+        if (!isAuthorized(session)) return unauthorized()
         val params = session.parameters
         val clear = params["clear"]?.firstOrNull()?.toBooleanStrictOrNull() ?: true
 
-        val prefs = service.getSharedPreferences(PREF_PENDING, Context.MODE_PRIVATE)
-        val content = prefs.getString(KEY_PENDING_CONTENT, null)
-        if (content.isNullOrBlank()) {
+        val cmd = inMemoryCommand
+        if (cmd == null) {
             return newFixedLengthResponse(
                 Response.Status.OK,
                 "application/json",
@@ -241,23 +246,21 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
             )
         }
 
-        val json = JSONObject()
-        json.put("success", true)
-        json.put("id", prefs.getString(KEY_PENDING_ID, ""))
-        json.put("title", prefs.getString(KEY_PENDING_TITLE, ""))
-        json.put("content", content)
-        json.put("updatedAt", prefs.getLong(KEY_PENDING_UPDATED_AT, System.currentTimeMillis()))
-
         if (clear) {
-            service.getSharedPreferences(PREF_PENDING, Context.MODE_PRIVATE).edit()
-                .clear()
-                .apply()
+            inMemoryCommand = null
         }
+
+        val resp = JSONObject()
+        resp.put("success", true)
+        resp.put("id", cmd.optString("id", ""))
+        resp.put("title", cmd.optString("title", ""))
+        resp.put("content", cmd.optString("content", ""))
+        resp.put("updatedAt", cmd.optLong("updatedAt", System.currentTimeMillis()))
 
         return newFixedLengthResponse(
             Response.Status.OK,
             "application/json",
-            json.toString()
+            resp.toString()
         )
     }
 
@@ -265,5 +268,29 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
         val map = HashMap<String, String>()
         session.parseBody(map)
         return map["postData"] ?: ""
+    }
+
+    private fun getAuthToken(): String {
+        val prefs = service.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        var token = prefs.getString(KEY_AUTH_TOKEN, null)
+        if (token.isNullOrBlank()) {
+            token = UUID.randomUUID().toString().replace("-", "")
+            prefs.edit().putString(KEY_AUTH_TOKEN, token).apply()
+        }
+        return token
+    }
+
+    private fun isAuthorized(session: IHTTPSession): Boolean {
+        val expected = getAuthToken()
+        val provided = session.headers["x-auth-token"] ?: session.parameters["token"]?.firstOrNull()
+        return expected.isBlank() || expected == provided
+    }
+
+    private fun unauthorized(): Response {
+        return newFixedLengthResponse(
+            Response.Status.UNAUTHORIZED,
+            "application/json",
+            """{"error":"unauthorized"}"""
+        )
     }
 }
