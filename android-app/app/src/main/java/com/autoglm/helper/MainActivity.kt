@@ -45,6 +45,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var addCommandButton: Button
     private lateinit var commandListView: RecyclerView
     private lateinit var emptyCommandText: TextView
+    private lateinit var agentStatusText: TextView
+    private lateinit var agentStartButton: Button
+    private lateinit var agentStopButton: Button
     private lateinit var apiKeyInput: EditText
     private lateinit var baseUrlInput: EditText
     private lateinit var modelInput: EditText
@@ -98,6 +101,9 @@ class MainActivity : AppCompatActivity() {
         addCommandButton = findViewById(R.id.addCommandButton)
         commandListView = findViewById(R.id.commandList)
         emptyCommandText = findViewById(R.id.emptyCommandText)
+        agentStatusText = findViewById(R.id.agentStatusText)
+        agentStartButton = findViewById(R.id.agentStartButton)
+        agentStopButton = findViewById(R.id.agentStopButton)
         apiKeyInput = findViewById(R.id.apiKeyInput)
         baseUrlInput = findViewById(R.id.baseUrlInput)
         modelInput = findViewById(R.id.modelInput)
@@ -128,6 +134,9 @@ class MainActivity : AppCompatActivity() {
         openSettingsButton.setOnClickListener {
             openAccessibilitySettings()
         }
+
+        agentStartButton.setOnClickListener { callAgentControl("/agent/start") }
+        agentStopButton.setOnClickListener { callAgentControl("/agent/stop") }
         
         testConnectionButton.setOnClickListener {
             testConnection()
@@ -156,6 +165,7 @@ class MainActivity : AppCompatActivity() {
         }
         
         updateStatus()
+        refreshAgentStatus()
     }
 
     override fun onResume() {
@@ -185,6 +195,7 @@ class MainActivity : AppCompatActivity() {
                 getString(R.string.server_stopped)
             )
         }
+        refreshAgentStatus()
     }
 
     private fun openAccessibilitySettings() {
@@ -440,6 +451,66 @@ class MainActivity : AppCompatActivity() {
                     getString(R.string.command_enqueue_failed, command.title)
                 }
                 Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun refreshAgentStatus() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("http://localhost:${AutoGLMAccessibilityService.PORT}/agent/status")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 2000
+                connection.readTimeout = 2000
+                val code = connection.responseCode
+                val body = connection.inputStream?.bufferedReader()?.use { it.readText() } ?: ""
+                connection.disconnect()
+                if (code == 200) {
+                    val obj = JSONObject(body)
+                    val running = obj.optBoolean("running", false)
+                    withContext(Dispatchers.Main) {
+                        agentStatusText.text = getString(
+                            R.string.agent_status_label,
+                            if (running) "运行中" else "已停止"
+                        )
+                    }
+                }
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun callAgentControl(path: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val url = URL("http://localhost:${AutoGLMAccessibilityService.PORT}$path")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 2000
+                connection.readTimeout = 2000
+                val code = connection.responseCode
+                connection.inputStream?.close()
+                connection.disconnect()
+                withContext(Dispatchers.Main) {
+                    if (code == 200) {
+                        refreshAgentStatus()
+                    } else {
+                        Toast.makeText(
+                            this@MainActivity,
+                            getString(R.string.agent_call_failed, "HTTP $code"),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.agent_call_failed, e.message ?: ""),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
             }
         }
     }

@@ -42,6 +42,9 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
                 uri == "/input" && method == Method.POST -> handleInput(session)
                 uri == "/config" && method == Method.GET -> handleConfigGet(session)
                 uri == "/config" && method == Method.POST -> handleConfigUpdate(session)
+                uri == "/agent/status" && method == Method.GET -> handleAgentStatus()
+                uri == "/agent/start" && method == Method.POST -> handleAgentStart()
+                uri == "/agent/stop" && method == Method.POST -> handleAgentStop()
                 uri == "/commands" && method == Method.GET -> handleCommandsGet(session)
                 uri == "/commands" && method == Method.POST -> handleCommandsPost(session)
                 uri == "/command_history" && method == Method.GET -> handleCommandHistoryGet(session)
@@ -416,6 +419,39 @@ class HttpServer(private val service: AutoGLMAccessibilityService, port: Int = 8
             resp.toString()
         )
     }
+
+    private fun callTermuxAgent(path: String): Response {
+        return try {
+            val url = java.net.URL("http://127.0.0.1:18080$path")
+            val conn = url.openConnection() as java.net.HttpURLConnection
+            if (path.contains("/start") || path.contains("/stop")) {
+                conn.requestMethod = "POST"
+            } else {
+                conn.requestMethod = "GET"
+            }
+            conn.connectTimeout = 3000
+            conn.readTimeout = 3000
+            val code = conn.responseCode
+            val body = conn.inputStream?.bufferedReader()?.use { it.readText() } ?: ""
+            conn.disconnect()
+            newFixedLengthResponse(
+                if (code == 200) Response.Status.OK else Response.Status.INTERNAL_ERROR,
+                "application/json",
+                if (body.isNotBlank()) body else """{"code":$code}"""
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Call termux agent failed", e)
+            newFixedLengthResponse(
+                Response.Status.INTERNAL_ERROR,
+                "application/json",
+                """{"error":"${e.message}"}"""
+            )
+        }
+    }
+
+    private fun handleAgentStatus(): Response = callTermuxAgent("/agent/status")
+    private fun handleAgentStart(): Response = callTermuxAgent("/agent/start")
+    private fun handleAgentStop(): Response = callTermuxAgent("/agent/stop")
 
     private fun getRequestBody(session: IHTTPSession): String {
         val map = HashMap<String, String>()
