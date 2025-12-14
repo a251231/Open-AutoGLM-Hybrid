@@ -63,6 +63,7 @@
     <string name="agent_stop">停止 Agent</string>
     <string name="agent_status_label">当前状态: %s</string>
     <string name="agent_call_failed">调用失败: %s</string>
+    <string name="run_tip_termux">请在 Termux 启动 run_control.py（示例：python ~/run_control.py），确保 App 能控制 Agent。</string>
     <string-array name="provider_options">
         <item>grs</item>
         <item>siliconflow</item>
