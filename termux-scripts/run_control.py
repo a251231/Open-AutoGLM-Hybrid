@@ -16,11 +16,15 @@ def run_cmd(cmd: str) -> subprocess.CompletedProcess:
 class Handler(BaseHTTPRequestHandler):
     def _ok(self, obj: dict):
         data = json.dumps(obj).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except BrokenPipeError:
+            # 客户端在响应写出前关闭连接，忽略即可
+            pass
 
     def do_POST(self):
         if self.path == "/agent/start":
