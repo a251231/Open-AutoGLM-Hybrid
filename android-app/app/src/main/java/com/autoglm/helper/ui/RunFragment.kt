@@ -20,8 +20,6 @@ import java.net.URL
 
 class RunFragment : Fragment() {
 
-    private val agentPort = 18080
-
     private lateinit var agentStatusText: TextView
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
@@ -51,7 +49,7 @@ class RunFragment : Fragment() {
     private fun refreshAgentStatus() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val url = URL("http://127.0.0.1:$agentPort/agent/status")
+                val url = URL("http://localhost:${AutoGLMAccessibilityService.PORT}/agent/status")
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "GET"
                 conn.connectTimeout = 2000
@@ -77,7 +75,7 @@ class RunFragment : Fragment() {
     private fun callAgent(path: String) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val url = URL("http://127.0.0.1:$agentPort$path")
+                val url = URL("http://localhost:${AutoGLMAccessibilityService.PORT}$path")
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.connectTimeout = 2000
