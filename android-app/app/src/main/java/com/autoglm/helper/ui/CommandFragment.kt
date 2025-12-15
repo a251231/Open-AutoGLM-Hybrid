@@ -50,9 +50,11 @@ class CommandFragment : Fragment() {
         private const val KEY_BASE_URL = "base_url"
         private const val KEY_MODEL = "model"
         private const val KEY_PROVIDER = "provider"
+        private const val KEY_HELPER_URL = "helper_url"
         private const val DEFAULT_BASE_URL = "https://api.grsai.com/v1"
         private const val DEFAULT_MODEL = "gpt-4-vision-preview"
         private const val DEFAULT_PROVIDER = "grs"
+        private const val DEFAULT_HELPER_URL = "http://127.0.0.1:18080"
     }
 
     override fun onCreateView(
@@ -171,7 +173,7 @@ class CommandFragment : Fragment() {
         lifecycleScope.launch(Dispatchers.IO) {
             var success = false
             try {
-                val url = URL("http://localhost:${AutoGLMAccessibilityService.PORT}/command")
+                val url = URL("${helperBaseUrl()}/command")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "POST"
                 connection.doOutput = true
@@ -213,7 +215,7 @@ class CommandFragment : Fragment() {
     private fun syncCommandsFromServer(showToast: Boolean = false) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val url = URL("http://localhost:${AutoGLMAccessibilityService.PORT}/commands")
+                val url = URL("${helperBaseUrl()}/commands")
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "GET"
                 connection.setRequestProperty("X-Auth-Token", getOrCreateAuthToken())
@@ -263,5 +265,10 @@ class CommandFragment : Fragment() {
             prefs.edit().putString(KEY_AUTH_TOKEN, token).apply()
         }
         return token
+    }
+
+    private fun helperBaseUrl(): String {
+        val raw = prefs.getString(KEY_HELPER_URL, DEFAULT_HELPER_URL) ?: DEFAULT_HELPER_URL
+        return raw.trimEnd('/')
     }
 }

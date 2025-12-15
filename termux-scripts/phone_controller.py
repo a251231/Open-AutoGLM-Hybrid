@@ -27,13 +27,14 @@ logging.basicConfig(
 logger = logging.getLogger('PhoneController')
 
 AUTH_TOKEN = os.environ.get("AUTOGLM_AUTH_TOKEN", "")
+HELPER_URL = os.environ.get("AUTOGLM_HELPER_URL", "http://localhost:18080")
 
 
 def _auth_headers() -> dict:
     return {"X-Auth-Token": AUTH_TOKEN} if AUTH_TOKEN else {}
 
 
-def load_config_from_app(helper_url: str = "http://localhost:8080") -> bool:
+def load_config_from_app(helper_url: str = HELPER_URL) -> bool:
     """从 App 拉取配置并注入环境变量"""
     try:
         resp = requests.get(f"{helper_url}/config", headers=_auth_headers(), timeout=2)
@@ -62,7 +63,7 @@ def load_config_from_app(helper_url: str = "http://localhost:8080") -> bool:
         return False
 
 
-def fetch_pending_command(helper_url: str = "http://localhost:8080", clear: bool = True) -> Optional[dict]:
+def fetch_pending_command(helper_url: str = HELPER_URL, clear: bool = True) -> Optional[dict]:
     """获取待执行指令（默认获取后清空）"""
     try:
         params = {"clear": "true" if clear else "false"}
@@ -79,7 +80,7 @@ def fetch_pending_command(helper_url: str = "http://localhost:8080", clear: bool
         return None
 
 
-def post_command_history(command_id: str, content: str, result: str, message: Optional[str] = None, helper_url: str = "http://localhost:8080"):
+def post_command_history(command_id: str, content: str, result: str, message: Optional[str] = None, helper_url: str = HELPER_URL):
     """上报指令执行历史"""
     if not command_id:
         return
@@ -109,14 +110,15 @@ class PhoneController:
     MODE_LADB = "ladb"  # LADB 模式
     MODE_NONE = "none"  # 无可用模式
     
-    def __init__(self, helper_url: str = "http://localhost:8080"):
+    def __init__(self, helper_url: Optional[str] = None):
         """
         初始化手机控制器
         
         Args:
             helper_url: AutoGLM Helper 的 URL
         """
-        self.helper_url = helper_url
+        env_helper_url = os.environ.get("AUTOGLM_HELPER_URL")
+        self.helper_url = helper_url or env_helper_url or HELPER_URL
         self.mode = self.MODE_NONE
         self.adb_device = None
         
@@ -154,6 +156,7 @@ class PhoneController:
         try:
             response = requests.get(
                 f"{self.helper_url}/status",
+                headers=_auth_headers(),
                 timeout=3
             )
             
@@ -282,6 +285,7 @@ class PhoneController:
         try:
             response = requests.get(
                 f"{self.helper_url}/screenshot",
+                headers=_auth_headers(),
                 timeout=10
             )
             
@@ -360,6 +364,7 @@ class PhoneController:
             response = requests.post(
                 f"{self.helper_url}/tap",
                 json={'x': x, 'y': y},
+                headers=_auth_headers(),
                 timeout=5
             )
             
@@ -419,6 +424,7 @@ class PhoneController:
             response = requests.post(
                 f"{self.helper_url}/swipe",
                 json={'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'duration': duration},
+                headers=_auth_headers(),
                 timeout=10
             )
             
@@ -475,6 +481,7 @@ class PhoneController:
             response = requests.post(
                 f"{self.helper_url}/input",
                 json={'text': text},
+                headers=_auth_headers(),
                 timeout=5
             )
             

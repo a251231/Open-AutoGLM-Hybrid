@@ -37,16 +37,19 @@ class SettingsFragment : Fragment() {
         private const val KEY_AUTH_TOKEN = "auth_token"
         private const val KEY_ACTIVE_PRESET = "active_preset"
         private const val KEY_PRESETS = "config_presets"
+        private const val KEY_HELPER_URL = "helper_url"
 
         private const val DEFAULT_BASE_URL = "https://api.grsai.com/v1"
         private const val DEFAULT_MODEL = "gpt-4-vision-preview"
         private const val DEFAULT_PROVIDER = "grs"
+        private const val DEFAULT_HELPER_URL = "http://127.0.0.1:18080"
     }
 
     private val prefs by lazy { requireContext().getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE) }
 
     private lateinit var apiKeyInput: EditText
     private lateinit var baseUrlInput: EditText
+    private lateinit var helperUrlInput: EditText
     private lateinit var modelInput: EditText
     private lateinit var providerSpinner: Spinner
     private lateinit var authTokenText: TextView
@@ -71,6 +74,7 @@ class SettingsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         apiKeyInput = view.findViewById(R.id.apiKeyInput)
         baseUrlInput = view.findViewById(R.id.baseUrlInput)
+        helperUrlInput = view.findViewById(R.id.helperUrlInput)
         modelInput = view.findViewById(R.id.modelInput)
         providerSpinner = view.findViewById(R.id.providerSpinner)
         authTokenText = view.findViewById(R.id.authTokenText)
@@ -113,12 +117,14 @@ class SettingsFragment : Fragment() {
         val baseUrl = prefs.getString(KEY_BASE_URL, DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL
         val model = prefs.getString(KEY_MODEL, DEFAULT_MODEL) ?: DEFAULT_MODEL
         val provider = prefs.getString(KEY_PROVIDER, DEFAULT_PROVIDER) ?: DEFAULT_PROVIDER
+        val helperUrl = prefs.getString(KEY_HELPER_URL, DEFAULT_HELPER_URL) ?: DEFAULT_HELPER_URL
         val authToken = getOrCreateAuthToken()
         val providers = resources.getStringArray(R.array.provider_options)
         val index = providers.indexOf(provider).takeIf { it >= 0 } ?: 0
 
         apiKeyInput.setText(apiKey)
         baseUrlInput.setText(baseUrl)
+        helperUrlInput.setText(helperUrl)
         modelInput.setText(model)
         providerSpinner.setSelection(index)
         authTokenText.text = "${getString(R.string.config_token_label)}:\n$authToken"
@@ -131,6 +137,7 @@ class SettingsFragment : Fragment() {
     private fun saveConfig() {
         val apiKey = apiKeyInput.text.toString().trim()
         val baseUrl = baseUrlInput.text.toString().trim()
+        val helperUrl = helperUrlInput.text.toString().trim()
         val model = modelInput.text.toString().trim()
         val provider = providerSpinner.selectedItem?.toString()?.trim() ?: DEFAULT_PROVIDER
 
@@ -138,10 +145,15 @@ class SettingsFragment : Fragment() {
             Toast.makeText(requireContext(), getString(R.string.config_base_url_invalid), Toast.LENGTH_SHORT).show()
             return
         }
+        if (helperUrl.isBlank() || !isValidUrl(helperUrl)) {
+            Toast.makeText(requireContext(), getString(R.string.config_helper_url_invalid), Toast.LENGTH_SHORT).show()
+            return
+        }
 
         prefs.edit()
             .putString(KEY_API_KEY, apiKey)
             .putString(KEY_BASE_URL, baseUrl)
+            .putString(KEY_HELPER_URL, helperUrl)
             .putString(KEY_MODEL, if (model.isBlank()) DEFAULT_MODEL else model)
             .putString(KEY_PROVIDER, provider)
             .apply()
@@ -152,6 +164,7 @@ class SettingsFragment : Fragment() {
     private fun resetConfig() {
         apiKeyInput.setText("")
         baseUrlInput.setText(DEFAULT_BASE_URL)
+        helperUrlInput.setText(DEFAULT_HELPER_URL)
         modelInput.setText(DEFAULT_MODEL)
         val providers = resources.getStringArray(R.array.provider_options)
         val index = providers.indexOf(DEFAULT_PROVIDER).takeIf { it >= 0 } ?: 0
@@ -160,6 +173,7 @@ class SettingsFragment : Fragment() {
         prefs.edit()
             .putString(KEY_API_KEY, "")
             .putString(KEY_BASE_URL, DEFAULT_BASE_URL)
+            .putString(KEY_HELPER_URL, DEFAULT_HELPER_URL)
             .putString(KEY_MODEL, DEFAULT_MODEL)
             .putString(KEY_PROVIDER, DEFAULT_PROVIDER)
             .apply()
@@ -247,6 +261,7 @@ class SettingsFragment : Fragment() {
         return mapOf(
             KEY_API_KEY to apiKeyInput.text.toString().trim(),
             KEY_BASE_URL to baseUrlInput.text.toString().trim().ifBlank { DEFAULT_BASE_URL },
+            KEY_HELPER_URL to helperUrlInput.text.toString().trim().ifBlank { DEFAULT_HELPER_URL },
             KEY_MODEL to modelInput.text.toString().trim().ifBlank { DEFAULT_MODEL },
             KEY_PROVIDER to provider
         )
@@ -255,6 +270,7 @@ class SettingsFragment : Fragment() {
     private fun applyConfig(data: Map<String, String>) {
         val apiKey = data[KEY_API_KEY].orEmpty()
         val baseUrl = data[KEY_BASE_URL] ?: DEFAULT_BASE_URL
+        val helperUrl = data[KEY_HELPER_URL] ?: DEFAULT_HELPER_URL
         val model = data[KEY_MODEL] ?: DEFAULT_MODEL
         val provider = data[KEY_PROVIDER] ?: DEFAULT_PROVIDER
         val providers = resources.getStringArray(R.array.provider_options)
@@ -262,12 +278,14 @@ class SettingsFragment : Fragment() {
 
         apiKeyInput.setText(apiKey)
         baseUrlInput.setText(baseUrl)
+        helperUrlInput.setText(helperUrl)
         modelInput.setText(model)
         providerSpinner.setSelection(index)
 
         prefs.edit()
             .putString(KEY_API_KEY, apiKey)
             .putString(KEY_BASE_URL, baseUrl)
+            .putString(KEY_HELPER_URL, helperUrl)
             .putString(KEY_MODEL, model)
             .putString(KEY_PROVIDER, provider)
             .apply()
@@ -286,6 +304,7 @@ class SettingsFragment : Fragment() {
                         name to mapOf(
                             KEY_API_KEY to obj.optString(KEY_API_KEY, ""),
                             KEY_BASE_URL to obj.optString(KEY_BASE_URL, DEFAULT_BASE_URL),
+                            KEY_HELPER_URL to obj.optString(KEY_HELPER_URL, DEFAULT_HELPER_URL),
                             KEY_MODEL to obj.optString(KEY_MODEL, DEFAULT_MODEL),
                             KEY_PROVIDER to obj.optString(KEY_PROVIDER, DEFAULT_PROVIDER)
                         )
@@ -304,6 +323,7 @@ class SettingsFragment : Fragment() {
             obj.put("name", name)
             obj.put(KEY_API_KEY, data[KEY_API_KEY].orEmpty())
             obj.put(KEY_BASE_URL, data[KEY_BASE_URL] ?: DEFAULT_BASE_URL)
+            obj.put(KEY_HELPER_URL, data[KEY_HELPER_URL] ?: DEFAULT_HELPER_URL)
             obj.put(KEY_MODEL, data[KEY_MODEL] ?: DEFAULT_MODEL)
             obj.put(KEY_PROVIDER, data[KEY_PROVIDER] ?: DEFAULT_PROVIDER)
             arr.put(obj)

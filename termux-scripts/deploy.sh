@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Open-AutoGLM 混合方案 - 一键部署脚本（通用环境）
-# 版本: 1.2.0
+# 版本: 1.2.4
 
 set -euo pipefail
 
@@ -11,6 +11,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
+HELPER_DEFAULT_PORT="18080"
 
 print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
@@ -21,7 +22,7 @@ print_header() {
     echo ""
     echo "============================================================"
     echo "  Open-AutoGLM 混合方案 - 一键部署"
-    echo "  版本: 1.2.0"
+    echo "  版本: 1.2.4"
     echo "============================================================"
     echo ""
 }
@@ -56,9 +57,19 @@ check_network() {
     print_info "检查网络连接..."
     if ping -c 1 8.8.8.8 >/dev/null 2>&1; then
         print_success "网络正常"
-    else
+        return
+    fi
+
+    if command -v curl >/dev/null 2>&1; then
+        if curl -fsSL --max-time 5 https://api.grsai.com/health >/dev/null 2>&1 || \
+           curl -fsSL --max-time 5 https://www.baidu.com >/dev/null 2>&1; then
+            print_warning "ICMP 被阻止，但 HTTP 可访问，继续安装"
+            return
+        fi
         print_error "无法访问外网，请检查网络"
         exit 1
+    else
+        print_warning "未检测到 curl，跳过 HTTP 网络检测，将继续执行"
     fi
 }
 
@@ -89,7 +100,12 @@ install_dependencies() {
     eval "$PKG_INSTALL curl wget"
     if ! command -v adb >/dev/null 2>&1; then
         print_info "安装 ADB（android-tools/adb）..."
-        eval "$PKG_INSTALL adb" || eval "$PKG_INSTALL android-tools" || true
+        eval "$PKG_INSTALL adb" || eval "$PKG_INSTALL android-tools" || eval "$PKG_INSTALL android-tools-adb" || true
+        if command -v adb >/dev/null 2>&1; then
+            print_success "已安装 ADB: $(adb version | head -n1)"
+        else
+            print_warning "ADB 未成功安装，LADB 模式可能不可用，请手动安装 android-tools-adb"
+        fi
     else
         print_success "已检测到 ADB: $(adb version | head -n1)"
     fi
@@ -155,10 +171,32 @@ install_autoglm() {
 download_hybrid_scripts() {
     print_info "准备混合方案脚本..."
     mkdir -p "$HOME/.autoglm"
-    cat > "$HOME/.autoglm/phone_controller.py" << 'PYTHON_EOF'
+
+    # 尝试从当前目录复制真实脚本；若不存在则回落到占位文件
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+
+    if [ -f "${SCRIPT_DIR}/phone_controller.py" ]; then
+        cp "${SCRIPT_DIR}/phone_controller.py" "$HOME/.autoglm/phone_controller.py"
+    else
+        cat > "$HOME/.autoglm/phone_controller.py" << 'PYTHON_EOF'
 # 占位文件，如有更新请替换为实际发布版本
 pass
 PYTHON_EOF
+    fi
+
+    rm -rf "$HOME/.autoglm/phone_agent"
+    mkdir -p "$HOME/.autoglm/phone_agent"
+    if [ -d "${SCRIPT_DIR}/phone_agent" ]; then
+        cp -r "${SCRIPT_DIR}/phone_agent/." "$HOME/.autoglm/phone_agent/"
+    else
+        cat > "$HOME/.autoglm/phone_agent/cli.py" << 'PYTHON_EOF'
+import sys
+print("未找到 phone_agent 真实实现，请更新部署脚本或手动放置 phone_agent 包")
+sys.exit(1)
+PYTHON_EOF
+        touch "$HOME/.autoglm/phone_agent/__init__.py"
+    fi
+
     print_success "混合方案脚本就绪"
 }
 
@@ -187,6 +225,10 @@ configure_llm() {
     read -r -p "请输入模型名称(回车使用默认: ${DEFAULT_MODEL}): " model_input
     MODEL="${model_input:-$DEFAULT_MODEL}"
 
+    read -r -p "请输入 Helper 端口(回车使用默认: ${HELPER_DEFAULT_PORT}): " helper_port_input
+    HELPER_PORT="${helper_port_input:-$HELPER_DEFAULT_PORT}"
+    HELPER_URL="http://localhost:${HELPER_PORT}"
+
     cat > "$HOME/.autoglm/config.sh" << EOF
 #!/usr/bin/env bash
 # LLM 配置
@@ -196,7 +238,7 @@ export PHONE_AGENT_API_KEY="${api_key}"
 export PHONE_AGENT_MODEL="${MODEL}"
 
 # AutoGLM Helper 配置
-export AUTOGLM_HELPER_URL="http://localhost:8080"
+export AUTOGLM_HELPER_URL="${HELPER_URL}"
 EOF
 
     if ! grep -q "source ~/.autoglm/config.sh" "$HOME/.bashrc" 2>/dev/null; then
@@ -207,7 +249,7 @@ EOF
 
     # shellcheck source=/dev/null
     source "$HOME/.autoglm/config.sh"
-    print_success "LLM 配置完成（提供商: ${PROVIDER}, 模型: ${MODEL}）"
+    print_success "LLM 配置完成（提供商: ${PROVIDER}, 模型: ${MODEL}, Helper: ${HELPER_URL}）"
 }
 
 create_launcher() {
@@ -221,6 +263,7 @@ if [ -x "$HOME/.autoglm-venv/bin/python" ]; then
 else
   PY_BIN="python"
 fi
+export PYTHONPATH="$HOME/.autoglm:${PYTHONPATH:-}"
 if [ -f "$HOME/.autoglm/config.sh" ]; then
   # shellcheck source=/dev/null
   source "$HOME/.autoglm/config.sh"
@@ -239,8 +282,9 @@ LAUNCHER_EOF
 }
 
 check_helper_app() {
+    local helper_url="${AUTOGLM_HELPER_URL:-http://localhost:${HELPER_DEFAULT_PORT}}"
     print_info "请确保已安装并开启 AutoGLM Helper (无障碍服务)。"
-    echo "如需检测连接，可手动执行: curl http://localhost:8080/status"
+    echo "如需检测连接，可手动执行: curl ${helper_url}/status"
     echo "鉴权提示: App 首次启动会生成 Token，请在 Termux 中设置环境变量 AUTOGLM_AUTH_TOKEN=该 Token 后再运行。"
 }
 

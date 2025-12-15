@@ -1,5 +1,6 @@
 package com.autoglm.helper.ui
 
+import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -19,6 +20,14 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class RunFragment : Fragment() {
+
+    companion object {
+        private const val PREF_NAME = "app_config"
+        private const val KEY_HELPER_URL = "helper_url"
+        private const val DEFAULT_HELPER_URL = "http://127.0.0.1:18080"
+    }
+
+    private val prefs by lazy { requireContext().getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE) }
 
     private lateinit var agentStatusText: TextView
     private lateinit var startButton: Button
@@ -49,7 +58,7 @@ class RunFragment : Fragment() {
     private fun refreshAgentStatus() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val url = URL("http://localhost:${AutoGLMAccessibilityService.PORT}/agent/status")
+                val url = URL("${helperBaseUrl()}/agent/status")
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "GET"
                 conn.connectTimeout = 2000
@@ -75,7 +84,7 @@ class RunFragment : Fragment() {
     private fun callAgent(path: String) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val url = URL("http://localhost:${AutoGLMAccessibilityService.PORT}$path")
+                val url = URL("${helperBaseUrl()}$path")
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.connectTimeout = 2000
@@ -104,5 +113,10 @@ class RunFragment : Fragment() {
                 }
             }
         }
+    }
+
+    private fun helperBaseUrl(): String {
+        val raw = prefs.getString(KEY_HELPER_URL, DEFAULT_HELPER_URL) ?: DEFAULT_HELPER_URL
+        return raw.trimEnd('/')
     }
 }

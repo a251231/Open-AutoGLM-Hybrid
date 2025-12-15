@@ -12,8 +12,8 @@ android {
         applicationId = "com.autoglm.helper"
         minSdk = 24  // Android 7.0
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.2.0"
+        versionCode = 6
+        versionName = "1.2.4"
     }
 
     buildTypes {
